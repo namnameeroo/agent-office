@@ -92,7 +92,7 @@ node --test
 - 서버가 1초마다 스스로 사무실을 수집한다. 탭을 닫아 둬도 상태 변화 로그와 퇴근 기록이 쌓인다. `GET /api/state`는 마지막 수집 결과 `{ generatedAt, counts, desks, gone, events, lastEventAt }`를 준다.
 - 로그와 퇴근 기록은 서버 메모리에 2시간 둔다. 서버를 재시작하면 사라진다.
 - 팀장 상태는 `~/.claude/sessions/<pid>.json`의 `status`·`waitingFor`로 판정한다. 공식 문서에 없는 내부 파일이라 Claude Code 업데이트로 깨질 수 있다. → [ADR 0001](docs/adr/0001-read-status-from-sessions-files.md)
-- 대화형 터미널과 백그라운드 세션(`claude agents`·`--bg`·`/bg`, `kind: "bg"`)을 읽는다. 백그라운드 세션의 칠판을 누르면 `claude attach <jobId>`를 클립보드에 복사하고 그 세션을 띄운 터미널 앱만 앞으로 가져온다(탭은 고르지 않는다. 새 탭에서 ⌘V). 쉰 시각은 대화 기록의 마지막 시각으로 잰다. → [ADR 0007](docs/adr/0007-background-sessions.md)
+- 대화형 터미널과 백그라운드 세션(`claude agents`·`--bg`·`/bg`, `kind: "bg"`)을 읽는다. 백그라운드 세션의 칠판을 누르면 그 세션에 붙어 있는 `claude attach` 터미널로, 없으면 `claude agents`(agent view)를 띄운 터미널로 옮기고 `claude attach <jobId>`를 클립보드에 복사한다. 둘 다 없으면 복사한 뒤 supervisor를 띄운 터미널 앱만 앞으로 가져온다(새 탭에서 ⌘V). 쉰 시각은 대화 기록의 마지막 시각으로 잰다. → [ADR 0007](docs/adr/0007-background-sessions.md)
 - 말풍선·팀원·구역·링크 칩은 세션 기록(jsonl)과 git 레포 위치로 계산한다. 링크 칩은 그 세션이 `gh pr create`로 만든 PR, Artifact 도구 결과, Jira 도구로 다룬 티켓만 쓴다(스펙 §4).
 - 화면은 1초마다 `/api/state`를 폴링하고, DOM은 key로 노드를 재사용해 갱신한다. 그래서 갱신 중에도 클릭·포커스·스크롤·텍스트 선택이 유지된다. 건물 움직임은 canvas에 8fps로 칠한다.
 - `POST /api/focus { pid }`는 그 세션의 터미널을 앞으로 가져온다. 결과는 `{ ok, app, partial? }` 또는 `{ ok: false, reason }`이고, 실패·일부만이면 화면 위에 이유를 4초 띄운다.

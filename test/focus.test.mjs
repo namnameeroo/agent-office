@@ -67,9 +67,9 @@ test("pickGhostty: 같은 폴더에서 제목(앞 상태 기호 뗀 것)이 같�
   assert.equal(pickGhostty(terms, { cwd: "/c", title: null }), "D");
 });
 
-import { attachHelp } from "../lib/focus.mjs";
+import { attachHelp, parseClients, etimeSec } from "../lib/focus.mjs";
 
-test("attachHelp(bg 세션): 다시 붙는 명령을 클립보드에(pbcopy), 세션을 띄운 터미널 앱만 앞으로 — 탭은 고르지 않는다", async () => {
+test("attachHelp(bg 세션, 붙은 클라이언트도 agent view도 없을 때): 명령을 클립보드에(pbcopy), supervisor를 띄운 터미널 앱만 앞으로 — 탭은 고르지 않는다", async () => {
   const calls = [];
   const fake = (envLine, fail = {}) => async (cmd, args, input) => {
     calls.push([cmd, ...args, ...(input === undefined ? [] : [`<${input}`])]);
@@ -84,6 +84,7 @@ test("attachHelp(bg 세션): 다시 붙는 명령을 클립보드에(pbcopy), �
     partial: "복사함: claude attach 29c7856c · Orca에서 새 탭을 열고 붙여넣기(⌘V)",
   });
   assert.deepEqual(calls, [
+    ["pgrep", "-U", String(process.getuid()), "-lf", "^([^ ]*/)?claude (agents|attach)( |$)"],
     ["pbcopy", "<claude attach 29c7856c"],
     ["ps", "eww", "-o", "command=", "-p", "7"],
     ["open", "-b", "com.stablyai.orca"],
@@ -115,4 +116,81 @@ test("attachHelp(bg 세션): 다시 붙는 명령을 클립보드에(pbcopy), �
     reason: "백그라운드 세션이라 붙은 터미널이 없다",
   });
   assert.deepEqual(calls, []);
+});
+
+test("parseClients·etimeSec: 실행 파일이 claude이고 첫 인자가 agents·attach인 줄만, etime은 초", () => {
+  assert.deepEqual(
+    parseClients(
+      "85177 claude agents\n90001 /Users/me/.local/bin/claude attach 29c7856c\n90002 claude attach\n90003 vim notes claude agents\n",
+    ),
+    [
+      { pid: 85177, kind: "agents", id: null },
+      { pid: 90001, kind: "attach", id: "29c7856c" },
+      { pid: 90002, kind: "attach", id: null },
+    ],
+  );
+  assert.equal(etimeSec("13:58"), 13 * 60 + 58);
+  assert.equal(etimeSec("01:02:03"), 3723);
+  assert.equal(etimeSec("2-01:02:03"), 2 * 86400 + 3723);
+});
+
+test("attachHelp: 그 잡에 붙은 claude attach가 있으면 그 터미널로(복사 없음), 없으면 가장 최근 agent view로(복사), 둘 다 실패하면 supervisor 앱", async () => {
+  const desk = { pid: 7, jobId: "29c7856c", title: "로그 포맷 통일", cwd: "/w" };
+  const calls = [];
+  const focused = [];
+  // pgrep 결과·etime·각 프로세스 작업 폴더를 정해 주는 가짜 실행기와 가짜 focusTerminal
+  const world = ({ clients, etime = "", focusResult = () => ({ ok: true, app: "Ghostty" }) }) => [
+    async (cmd, args, input) => {
+      calls.push([cmd, ...args, ...(input === undefined ? [] : [`<${input}`])]);
+      if (cmd === "pgrep") return { err: clients ? null : new Error("no match"), out: clients ?? "" };
+      if (cmd === "ps" && args[1] === "pid=,etime=") return { err: null, out: etime };
+      if (cmd === "lsof") return { err: null, out: `p${args[2]}\nfcwd\nn/cwd-of-${args[2]}\n` };
+      if (cmd === "ps") return { err: null, out: `claude TERM_PROGRAM=Orca ORCA_TERMINAL_HANDLE=${H}` }; // supervisor env(실측: Orca 핸들 있음)
+      return { err: null, out: "" };
+    },
+    async (d) => (focused.push(d), focusResult(d)),
+  ];
+
+  // 1) 이 잡에 붙은 attach(90001)가 있으면 agent view(85177)보다 먼저, 복사하지 않는다. 다른 잡의 attach(90009)는 무시
+  calls.length = focused.length = 0;
+  let [exec, focus] = world({
+    clients: "85177 claude agents\n90009 claude attach ffffffff\n90001 claude attach 29c7856c\n",
+    etime: " 85177 13:58\n 90009 00:10\n 90001 02:00\n",
+  });
+  assert.deepEqual(await attachHelp(desk, exec, focus), {
+    ok: true,
+    app: "Ghostty",
+    partial: "이미 붙어 있는 Ghostty 터미널로 옮겼다",
+  });
+  assert.deepEqual(focused, [{ pid: 90001, cwd: "/cwd-of-90001", title: "로그 포맷 통일" }]);
+  assert.equal(calls.some(([c]) => c === "pbcopy"), false);
+
+  // 2) 붙은 클라이언트가 없으면 가장 최근에 띄운 agent view(etime이 작은 85178)로 + 복사
+  calls.length = focused.length = 0;
+  [exec, focus] = world({
+    clients: "85177 claude agents\n85178 claude agents\n",
+    etime: " 85177 13:58\n 85178 00:30\n",
+  });
+  assert.deepEqual(await attachHelp(desk, exec, focus), {
+    ok: true,
+    app: "Ghostty",
+    partial: "복사함: claude attach 29c7856c · Ghostty의 agent view로 옮겼다(목록에서 고르거나 새 탭에서 ⌘V)",
+  });
+  assert.deepEqual(focused.map((d) => d.pid), [85178]);
+  assert.equal(calls.filter(([c]) => c === "pbcopy").length, 1);
+
+  // 3) agent view로 못 가면(focus 실패) supervisor 앱으로, 복사는 한 번만
+  calls.length = focused.length = 0;
+  [exec, focus] = world({
+    clients: "85177 claude agents\n",
+    etime: " 85177 13:58\n",
+    focusResult: () => ({ ok: false, reason: "x" }),
+  });
+  assert.deepEqual(await attachHelp(desk, exec, focus), {
+    ok: true,
+    app: "Orca",
+    partial: "복사함: claude attach 29c7856c · Orca에서 새 탭을 열고 붙여넣기(⌘V)",
+  });
+  assert.equal(calls.filter(([c]) => c === "pbcopy").length, 1);
+  assert.deepEqual(calls.at(-1), ["open", "-b", "com.stablyai.orca"]);
 });
