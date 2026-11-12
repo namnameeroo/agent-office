@@ -4,6 +4,7 @@
 import { el } from "./dom.mjs";
 import { towerSvg } from "./mini-sprites.mjs";
 import { fetchState } from "./api.mjs";
+import { draggable } from "./drag.mjs";
 
 const ICON = {
   // 정렬: 흩어진 점 셋이 바닥 한 줄로 → 아래 화살표 + 바닥선 위 점 셋
@@ -76,39 +77,15 @@ function setHidden(on) {
 }
 
 // 끌기: 판 어디서나. 끌었으면 뒤따르는 click은 무시한다
-let drag = null;
 let dragged = false;
-hub.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return;
-  drag = {
-    gx: e.clientX,
-    gyb: innerHeight - e.clientY,
-    sx: e.screenX,
-    sy: e.screenY,
-    moved: false,
-  };
+draggable({
+  canStart: (e) => hub.contains(e.target),
+  onStart: () => hub.classList.add("dragging"),
+  onEnd: (moved) => {
+    if (moved) dragged = true;
+    hub.classList.remove("dragging");
+  },
 });
-document.addEventListener("mousemove", (e) => {
-  if (!drag) return;
-  if (!drag.moved) {
-    if (Math.abs(e.screenX - drag.sx) + Math.abs(e.screenY - drag.sy) <= 4)
-      return;
-    drag.moved = true;
-    hub.classList.add("dragging");
-  }
-  window.agentOffice?.dragTo(e.screenX - drag.gx, e.screenY + drag.gyb);
-});
-const endDrag = () => {
-  if (!drag) return;
-  if (drag.moved) {
-    window.agentOffice?.dragEnd();
-    dragged = true;
-  }
-  drag = null;
-  hub.classList.remove("dragging");
-};
-document.addEventListener("mouseup", endDrag);
-document.addEventListener("mouseleave", endDrag);
 
 hub.addEventListener("click", async (e) => {
   if (dragged) {

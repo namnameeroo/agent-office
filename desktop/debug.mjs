@@ -2,8 +2,8 @@
 // AGENT_OFFICE_SCREENSHOT=<png>면 큰 창을 캡처(기본 3초 뒤), AGENT_OFFICE_SCREENSHOT_MINI=<png>면 미니 모드로 바꾼 뒤
 // 바탕화면 전체를 screencapture로 찍고 끝낸다(기본 4초). AGENT_OFFICE_SCREENSHOT_EXPAND=1이면 캡처 2초 전에 첫 펼칠 수 있는 말풍선을 누른다.
 // AGENT_OFFICE_SMOKE=1이면 미니 모드로 바꾼 뒤 캐릭터 창을 재고 옮겨 보며 [smoke] JSON 줄을 찍고 끝낸다(캡처 없음).
-// 단언은 scripts/smoke-pets.mjs(npm run smoke)가 한다
-import { app, screen } from "electron";
+// 단언은 scripts/smoke-pets.mjs(npm run smoke)가 한다. smoke 동안 기본 브라우저 열기·클립보드 쓰기·우클릭 메뉴는 가로채 기록만 한다
+import { app, clipboard, Menu, screen, shell } from "electron";
 import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { PET_H } from "./pets.mjs";
@@ -41,10 +41,18 @@ export function installDebug({
       app.quit();
     }, delay || 3000);
   if (process.env.AGENT_OFFICE_SMOKE) {
+    // 사용자 바깥 상태(브라우저·클립보드)를 건드리지 않는다. 우클릭 메뉴는 outside.pick 항목을 눌러 바로 닫는다
+    shell.openExternal = async (url) => void outside.opened.push(url);
+    clipboard.writeText = (text) => void outside.copied.push(text);
+    Menu.prototype.popup = function (opts) {
+      outside.menus.push(this.items.map((m) => m.label).filter(Boolean));
+      this.items.find((m) => m.label === outside.pick)?.click();
+      opts?.callback?.();
+    };
     setTimeout(showMini, 1200);
     setTimeout(
       () =>
-        smoke(pets, HUB, relocate)
+        smoke(pets, HUB, relocate, office)
           .catch((e) => console.log("[smoke]", JSON.stringify({ step: "error", message: String(e?.stack ?? e) })))
           .finally(() => setTimeout(() => app.quit(), 300)), // 파이프로 나가는 마지막 줄이 잘리지 않게
       4500,
@@ -139,16 +147,69 @@ export function installDebug({
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const outside = { opened: [], copied: [], menus: [], pick: null };
+// 캐릭터 창의 fetch를 감싼다: /api/state 요청 수·마지막 주소를 세고, full을 주면 그 창의 응답을 긴 마크다운으로 바꾼다(펼침을 실데이터와 무관하게)
+const SPY = `(() => {
+  if (window.__smoke) return;
+  const s = (window.__smoke = { polls: 0, last: null, full: null });
+  const f = window.fetch.bind(window);
+  window.fetch = async (u, o) => {
+    if (!String(u).startsWith("/api/state")) return f(u, o);
+    s.polls++;
+    s.last = String(u);
+    const r = await f(u, o);
+    if (!s.full || !r.ok) return r;
+    const j = await r.json();
+    for (const d of j.desks) { d.said = d.bubble = "스모크: 눌러서 펼침"; d.full = s.full; }
+    return new Response(JSON.stringify(j));
+  };
+})()`;
+const FULL = [
+  "## 스모크 응답",
+  "**굵게**와 `코드`, 링크 [예시 문서](https://example.com/smoke-doc), 그리고 <img src=x onerror=alert(1)> 글자.",
+  "",
+  "- 목록 하나",
+  "- 목록 둘 [나쁜 링크](javascript:alert(1))",
+  "",
+  "```",
+  "npm run smoke",
+  "```",
+  ...Array.from({ length: 40 }, (_, i) => `${i + 1}번째 줄: 긴 응답이 창 위로 넘치지 않는지 본다.`),
+].join("\n");
+const POLLS = "JSON.stringify({ n: window.__smoke?.polls ?? null, last: window.__smoke?.last ?? null, hidden: document.hidden, vis: document.visibilityState })";
+const MD = `(() => { const b = document.querySelector(".bubble[data-open]"); if (!b) return "null"; const n = (s) => b.querySelectorAll(s).length;
+  const a = b.querySelector("a"), r = a?.getBoundingClientRect();
+  return JSON.stringify({ strong: n("strong"), code: n("code"), li: n("li"), pre: n("pre"), h: n(".h"), a: n("a"), bad: n("img, script, [onerror]"),
+    link: a && { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), href: a.href, target: a.target, rel: a.rel } }); })()`;
+// 창 안 (x, y)를 잡고 화면 x로 dxs만큼 차례로 끈 뒤 놓는다(실제 입력 이벤트). 창이 따라 움직이므로 창 안 좌표는 그대로 둔다
+async function dragBy(win, x, y, dxs) {
+  const b = win.getBounds();
+  const wc = win.webContents;
+  const at = (type, dx, extra = {}) =>
+    wc.sendInputEvent({ type, x, y, globalX: b.x + x + dx, globalY: b.y + y, ...extra });
+  at("mouseDown", 0, { button: "left", clickCount: 1 });
+  for (const dx of dxs) {
+    await sleep(80);
+    at("mouseMove", dx);
+  }
+  await sleep(600);
+  return () => {
+    at("mouseUp", dxs.at(-1), { button: "left", clickCount: 1 });
+    wc.sendInputEvent({ type: "mouseLeave", x: -1, y: -1 }); // 포인터를 창 밖으로(호버·쪽지가 다음 단계에 남지 않게)
+  };
+}
 // 캐릭터 창 안의 칸 수치(창 기준 CSS px). 숨긴 요소는 null
 const MEASURE = `(()=>{const q=(s)=>{const e=document.querySelector(s);if(!e||e.hidden)return null;const r=e.getBoundingClientRect();return{l:r.left,t:r.top,w:r.width,h:r.height}};const b=document.querySelector(".bubble");return JSON.stringify({iw:innerWidth,ih:innerHeight,face:q(".face"),name:q(".name"),bubble:q(".bubble"),open:!!document.querySelector(".bubble[data-open]"),canOpen:!!b&&!b.hidden&&!("static" in b.dataset)})})()`;
 const BUBBLE = 'document.querySelector(".bubble:not([hidden]):not([data-static])")?.click()';
 
-// 측정 순서: 접힘(전부) → 펼침(바닥 왼쪽) → 위쪽 끝 펼침 → 오른쪽 끝 쪽지 → 허브 숨김·보임. 단계마다 [smoke] 한 줄
-async function smoke(pets, HUB, relocate) {
+// 측정 순서: 접힘(전부) → 펼침(바닥 왼쪽, 링크 누름·응답 복사) → 위쪽 끝 펼침 → 오른쪽 끝 쪽지·끌기 시작 → 허브 숨김·보임(폴링 멈춤) → 허브 끌기.
+// 단계마다 [smoke] 한 줄
+async function smoke(pets, HUB, relocate, office) {
   const log = (step, data) =>
     console.log("[smoke]", JSON.stringify({ step, ...data }));
   const js = (p, code) => p.win.webContents.executeJavaScript(code);
-  const all = () => [...pets.values()];
+  // 측정 중에 세션이 끝나 창이 닫힐 수 있다(실세션) → 닫힌 창은 건너뛴다
+  const all = () => [...pets.values()].filter((p) => !p.win.isDestroyed());
   const snap = async (p) => {
     const b = p.win.getBounds();
     return {
@@ -165,12 +226,16 @@ async function smoke(pets, HUB, relocate) {
     await js(p, BUBBLE);
     await sleep(1000);
   };
-  // 지나가는 마우스(쪽지·호버)가 수치를 흔들지 않게. 아래 단계는 DOM 이벤트·click()으로만 누른다
+  // 지나가는 마우스(쪽지·호버)가 수치를 흔들지 않게. 아래 단계는 DOM 이벤트·click()·sendInputEvent로만 누른다
   for (const p of all()) p.win.setIgnoreMouseEvents(true);
+  const chars = all().filter((p) => p.pid !== HUB);
+  // 상태 요청 세기(전부) + 첫 캐릭터의 응답을 긴 마크다운으로(펼침·위쪽 끝·링크·복사가 실데이터와 무관하게 돈다)
+  for (const p of chars) await js(p, SPY);
+  if (chars.length) await js(chars[0], `window.__smoke.full = ${JSON.stringify(FULL)}`);
+  await sleep(1500);
   const collapsed = await snapAll();
   log("collapsed", { wins: collapsed });
 
-  const chars = all().filter((p) => p.pid !== HUB);
   if (chars.length) {
     const wa = screen.getPrimaryDisplay().workArea;
     const floor = wa.y + wa.height - PET_H;
@@ -185,8 +250,30 @@ async function smoke(pets, HUB, relocate) {
       const before = await snap(target);
       await toggle(target);
       const after = await snap(target);
+      // 펼친 전문의 마크다운 요소, 그 안 링크를 실제 클릭(→ 메인 setWindowOpenHandler → openExternal), 말풍선은 펼친 채
+      const md = JSON.parse(await js(target, MD));
+      if (md?.link) {
+        const wc = target.win.webContents;
+        const { x, y } = md.link;
+        wc.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
+        wc.sendInputEvent({ type: "mouseUp", x, y, button: "left", clickCount: 1 });
+        wc.sendInputEvent({ type: "mouseLeave", x: -1, y: -1 }); // 포인터를 창 밖으로(쪽지가 다음 단계에 남지 않게)
+        await sleep(600);
+      }
+      const clicked = await snap(target);
+      // 우클릭 메뉴의 "응답 복사"
+      outside.pick = "응답 복사";
+      await js(target, 'document.querySelector(".cell").dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }))');
+      await sleep(500);
+      outside.pick = null;
       await toggle(target);
-      log("expand", { before, after });
+      log("expand", {
+        before,
+        after,
+        md,
+        link: { opened: outside.opened, stillOpen: clicked.open },
+        copy: { menu: outside.menus.at(-1) ?? null, same: outside.copied.at(-1) === FULL, n: outside.copied.length },
+      });
       // 위쪽 끝: 창 아래 모서리를 작업 영역 위 끝 + 160에 두고 펼친다(roomAbove 160)
       relocate(target, { x: wa.x + 24, y: wa.y + 160 - PET_H });
       await sleep(800);
@@ -196,7 +283,8 @@ async function smoke(pets, HUB, relocate) {
       await toggle(target);
       log("top", { before: tb, after: ta });
     }
-    // 오른쪽 끝: 앵커 = 작업 영역 오른쪽 - 112(접힌 128 창이 16 밀리는 자리). 마우스 올림(쪽지)으로 창을 넓힌다
+    // 오른쪽 끝: 앵커 요청 = 작업 영역 오른쪽 - 112 → clampTo가 - 128(접힌 창 폭)로 막아 접힌 창은 안 밀린다(shiftX 0).
+    // 마우스 올림(쪽지)으로 창을 넓히면 밀린 만큼 캐릭터 열이 옮겨진다. 그 상태에서 얼굴을 잡고 왼쪽으로 30 끈다(튀지 않아야)
     const p = chars[0];
     relocate(p, { x: wa.x + wa.width - 112, y: floor });
     await sleep(800);
@@ -204,9 +292,22 @@ async function smoke(pets, HUB, relocate) {
     await js(p, 'document.documentElement.dispatchEvent(new MouseEvent("mouseenter"))');
     await sleep(1000);
     const ra = await snap(p);
+    let drag = null;
+    if (ra.face) {
+      const DX = -30;
+      const release = await dragBy(
+        p.win,
+        Math.round(ra.face.l + ra.face.w / 2),
+        Math.round(ra.face.t + ra.face.h / 2),
+        [-10, -20, DX],
+      );
+      drag = { dx: DX, during: await snap(p) };
+      release();
+      await sleep(500);
+    }
     await js(p, 'document.documentElement.dispatchEvent(new MouseEvent("mouseleave"))');
     await sleep(800);
-    log("right", { before: rb, after: ra });
+    log("right", { before: rb, after: ra, drag });
   }
 
   // 허브의 눈 타일: 숨김 → 보임
@@ -216,12 +317,33 @@ async function smoke(pets, HUB, relocate) {
       await js(hub, 'document.querySelector("[data-act=pets]").click()');
       await sleep(900);
     };
+    const polls = () =>
+      Promise.all(
+        chars
+          .filter((p) => !p.win.isDestroyed())
+          .map(async (p) => ({ pid: p.pid, ...JSON.parse(await js(p, POLLS)) })),
+      );
     const before = await snapAll();
     await click();
     const hidden = await snapAll();
+    // 숨긴 동안 3초: 캐릭터 창의 상태 요청이 멈춰야 한다(document.hidden). 다시 보이면 곧바로 재개
+    const h0 = await polls();
+    await sleep(3000);
+    const h1 = await polls();
     await click();
     const shown = await snapAll();
-    log("hide", { before, hidden, shown });
+    const s1 = await polls();
+    log("hide", { before, hidden, shown, polls: { h0, h1, s1 } });
+
+    // 허브 끌기(공용 drag.mjs): 타워를 잡고 왼쪽으로 40. 끈 뒤의 click은 무시돼 큰 사무실이 안 열려야 한다
+    const t = JSON.parse(
+      await js(hub, 'JSON.stringify((r => ({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }))(document.querySelector("[data-act=office]").getBoundingClientRect()))'),
+    );
+    const hb = hub.win.getBounds();
+    const release = await dragBy(hub.win, t.x, t.y, [-10, -20, -40]);
+    release();
+    await sleep(500);
+    log("hubdrag", { dx: -40, before: hb, after: hub.win.getBounds(), office: office.isVisible() });
   }
   log("end", { pets: chars.length });
 }

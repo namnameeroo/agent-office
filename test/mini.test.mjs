@@ -177,12 +177,142 @@ test("peekLines: 위치는 중복 없이, 요청은 첫 줄, 지금은 작업 �
     ["위치", "my-registry · petshop"],
     ["요청", "서버 다시 켜줘"],
     ["지금", "실행 npm run dist"],
-    ["링크", "PR #150 · DATADEV-62"],
+    ["링크", [base.links[0], base.links[2]]], // 종류마다 최신 하나, 누를 수 있게 객체 그대로
   ]);
   assert.deepEqual(
     peekLines({ zone: "toys", worktree: null, branch: null, state: "resting", lastPrompt: null, activity: base.activity }),
     [["위치", "toys"]],
   );
+});
+
+test("peekLines 지금: 내용 없는 '생각'보다 내용이 있는 가장 최근 활동, 전부 비면 최신 것", async () => {
+  const { peekLines } = await import("../public/mini-model.mjs");
+  const now = (activity) =>
+    peekLines({ zone: "toys", state: "working", activity }).find(([k]) => k === "지금")?.[1];
+  assert.equal(
+    now([
+      { verb: "생각", detail: "" },
+      { verb: "생각", detail: "" },
+      { verb: "수정", detail: "lib/a.mjs" },
+      { verb: "실행", detail: "npm test" },
+    ]),
+    "수정 lib/a.mjs",
+  );
+  assert.equal(now([{ verb: "생각", detail: "" }]), "생각");
+  assert.equal(now([]), undefined);
+});
+
+test("isBackground·peekLines: 백그라운드 명령만 남은 작업 중 세션은 고리 점 대상이고 '지금'이 따로 말한다", async () => {
+  const { isBackground, peekLines } = await import("../public/mini-model.mjs");
+  const bg = d(1, "working", NOW, {
+    background: true,
+    zone: "toys",
+    activity: [{ verb: "실행", detail: "npm run dev" }],
+  });
+  assert.equal(isBackground(bg), true);
+  assert.equal(isBackground({ ...bg, background: false }), false);
+  assert.equal(isBackground(d(1, "working", NOW)), false); // 옛 서버(값 없음)
+  assert.equal(isBackground({ ...bg, state: "waiting" }), false); // 서버는 작업 중일 때만 붙이지만 화면도 지킨다
+  assert.deepEqual(peekLines(bg).find(([k]) => k === "지금"), ["지금", "백그라운드 명령만 실행 중"]);
+});
+
+test("mdBlocks: 문단·제목·목록·코드 블록·표, 들여 쓴 줄은 항목에 이어 붙임", async () => {
+  const { mdBlocks } = await import("../public/mini-model.mjs");
+  const src = [
+    "## 결과",
+    "첫 줄",
+    "둘째 줄",
+    "",
+    "- 하나",
+    "  이어지는 줄",
+    "* 둘",
+    "3. 셋째부터",
+    "",
+    "```js",
+    "const a = 1; // **굵게 아님**",
+    "```",
+    "| a | b |",
+    "|---|---|",
+    "#해시태그는 제목이 아님",
+  ].join("\r\n");
+  assert.deepEqual(mdBlocks(src), [
+    { type: "h", inline: [{ t: "text", v: "결과" }] },
+    { type: "p", inline: [{ t: "text", v: "첫 줄\n둘째 줄" }] },
+    {
+      type: "ul",
+      start: 1,
+      items: [[{ t: "text", v: "하나\n이어지는 줄" }], [{ t: "text", v: "둘" }]],
+    },
+    { type: "ol", start: 3, items: [[{ t: "text", v: "셋째부터" }]] },
+    { type: "pre", text: "const a = 1; // **굵게 아님**" },
+    { type: "pre", text: "| a | b |\n|---|---|" },
+    { type: "p", inline: [{ t: "text", v: "#해시태그는 제목이 아님" }] },
+  ]);
+  assert.deepEqual(mdBlocks(""), []);
+  assert.deepEqual(mdBlocks(null), []);
+  // 닫히지 않은 코드 블록은 끝까지 코드
+  assert.deepEqual(mdBlocks("```\nrm -rf x"), [{ type: "pre", text: "rm -rf x" }]);
+});
+
+test("mdInline: 굵게·코드·http(s) 링크·맨 주소(끝 구두점 제외), 굵게 안의 코드", async () => {
+  const { mdInline } = await import("../public/mini-model.mjs");
+  assert.deepEqual(mdInline("**완료**: `npm test` 통과 — [PR](https://example.com/pr/1) 참고"), [
+    { t: "b", c: [{ t: "text", v: "완료" }] },
+    { t: "text", v: ": " },
+    { t: "code", v: "npm test" },
+    { t: "text", v: " 통과 — " },
+    { t: "a", v: "PR", href: "https://example.com/pr/1" },
+    { t: "text", v: " 참고" },
+  ]);
+  assert.deepEqual(mdInline("주소는 https://example.com/a?b=1. 끝"), [
+    { t: "text", v: "주소는 " },
+    { t: "a", v: "https://example.com/a?b=1", href: "https://example.com/a?b=1" },
+    { t: "text", v: ". 끝" },
+  ]);
+  assert.deepEqual(mdInline("http://localhost:4545에서"), [
+    { t: "a", v: "http://localhost:4545", href: "http://localhost:4545" },
+    { t: "text", v: "에서" },
+  ]);
+  assert.deepEqual(mdInline("**`a` 굵게**"), [
+    { t: "b", c: [{ t: "code", v: "a" }, { t: "text", v: " 굵게" }] },
+  ]);
+});
+
+test("mdInline 악성·깨진 입력: 태그는 글자, http(s) 밖 링크는 원문 그대로, 닫히지 않은 **는 글자", async () => {
+  const { mdInline, mdBlocks } = await import("../public/mini-model.mjs");
+  const tags = '<img src=x onerror="alert(1)"><script>alert(2)</script>';
+  assert.deepEqual(mdInline(tags), [{ t: "text", v: tags }]);
+  for (const bad of [
+    "[눌러](javascript:alert(1))",
+    "[x](data:text/html,<b>hi</b>)",
+    "[x](vbscript:msgbox)",
+    "[x](//evil.example/a)",
+    "[x](HTTPS://example.com)", // 대문자 스킴도 링크로 만들지 않는다(화면·메인의 http(s) 판정과 같게)
+  ])
+    assert.ok(
+      mdInline(bad).every((t) => t.t === "text") && mdInline(bad).map((t) => t.v).join("") === bad,
+      bad,
+    );
+  assert.deepEqual(mdInline("**미완성 굵게"), [{ t: "text", v: "**미완성 굵게" }]);
+  assert.deepEqual(mdInline("****"), [{ t: "text", v: "****" }]);
+  assert.deepEqual(mdInline("`열린 코드"), [{ t: "text", v: "`열린 코드" }]);
+  // 속성 끼워 넣기: 공백에서 주소가 끝나 링크는 앞부분만, 나머지는 글자
+  const attr = mdInline('[x](https://ok.example" onclick="alert(1))');
+  assert.ok(attr.filter((t) => t.t === "a").every((t) => !/["\s]/.test(t.href)));
+  // 모든 a 토큰은 http(s) — 블록 안까지
+  const hrefs = (ts) => ts.flatMap((t) => (t.t === "a" ? [t.href] : t.c ? hrefs(t.c) : []));
+  const blocks = mdBlocks("# [a](javascript:x)\n- [b](https://ok.example)\n**[c](file:///etc/passwd)**");
+  const all = blocks.flatMap((b) => (b.items ? b.items.flatMap(hrefs) : b.inline ? hrefs(b.inline) : []));
+  assert.deepEqual(all, ["https://ok.example"]);
+});
+
+test("mdPlain: 접힌 말풍선용 — 기호만 벗긴다", async () => {
+  const { mdPlain } = await import("../public/mini-model.mjs");
+  assert.equal(mdPlain("**완료**: `npm test` 통과, [PR](https://example.com/1)"), "완료: npm test 통과, PR");
+  assert.equal(mdPlain("## 제목"), "제목");
+  assert.equal(mdPlain("- 하나\n- 둘"), "하나 둘");
+  assert.equal(mdPlain("권한 승인 필요 · Bash"), "권한 승인 필요 · Bash");
+  assert.equal(mdPlain("**잘린 굵게…"), "**잘린 굵게…");
 });
 
 test("elapsedShort: 단위 하나만 — 분·시간·일", async () => {

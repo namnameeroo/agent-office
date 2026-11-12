@@ -215,6 +215,11 @@ body.pet .cell[data-state="work"] .dot { /* avatarState 값: alert→waiting · 
 body.pet .cell[data-state="done"] .dot {
   background: var(--yellow);
 }
+/* 작업 중이지만 턴은 끝났고 백그라운드 명령(서버 등)만 살아 있음: 채우지 않은 초록 고리 */
+body.pet .cell[data-background] .dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--green);
+}
 /* 기다림 5분부터 이름표 전체가 빨강 */
 body.pet .cell[data-level="2"] .name,
 body.pet .cell[data-level="3"] .name {
@@ -320,6 +325,51 @@ body.pet .bubble[data-open]::before {
   margin: 0 0 7px;
   padding-bottom: 6px;
   box-shadow: 0 0.5px 0 var(--sep);
+}
+/* 펼친 전문의 가벼운 마크다운(mini-model mdBlocks). 문단 안 줄바꿈은 pre-wrap 그대로 */
+body.pet .bubble p,
+body.pet .bubble ul,
+body.pet .bubble ol,
+body.pet .bubble pre {
+  margin: 0 0 6px;
+}
+body.pet .bubble > :last-child {
+  margin-bottom: 0;
+}
+body.pet .bubble .h {
+  font-weight: 700;
+}
+body.pet .bubble ul,
+body.pet .bubble ol {
+  padding-left: 16px;
+}
+body.pet .bubble strong {
+  font-weight: 700;
+}
+body.pet .bubble code,
+body.pet .bubble pre {
+  font: 10px/14px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(60, 60, 67, 0.08);
+  border-radius: 4px;
+}
+body.pet .bubble code {
+  padding: 0 3px;
+}
+body.pet .bubble pre {
+  padding: 5px 7px;
+  white-space: pre;
+  overflow-x: auto;
+}
+/* 링크(펼친 말풍선·쪽지): 시스템 파랑, 누르면 기본 브라우저 */
+body.pet .bubble a,
+body.pet .peek a {
+  color: #007aff;
+  text-decoration: none;
+  cursor: pointer;
+}
+body.pet .bubble a:hover,
+body.pet .peek a:hover {
+  text-decoration: underline;
 }
 /* 포커스 실패 문구: 빨간 판, 맨 위 */
 body.pet .msg {
@@ -477,8 +527,7 @@ body.hub .hub {
   cursor: grab;
   user-select: none;
   width: max-content;
-  /* ponytail: 옛 띠 바탕(body)에서 물려받던 값을 그대로 옮겼다 — 배지 숫자가 안티앨리어싱 없이 그려진다. 매끈하게 하려면 지우면 된다(모습이 바뀜) */
-  -webkit-font-smoothing: none;
+  -webkit-font-smoothing: antialiased; /* 배지 숫자 */
 }
 body.hub .side {
   display: flex;

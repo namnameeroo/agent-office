@@ -8,20 +8,47 @@ export const MAX_W = 460;
 
 const floorY = (wa) => wa.y + wa.height - PET_H;
 
-// 새 캐릭터 자리: 바닥 왼쪽부터 128px 칸 중 비어 있는 첫 칸. 줄이 차면 ROW_H 위 줄, 셋째 줄까지 차면 첫 칸에 겹친다
-export function placeNew(taken, wa) {
-  const slots = Math.max(1, Math.floor((wa.width - MARGIN) / SLOT));
-  for (let r = 0; r < 3; r++) {
-    const y = floorY(wa) - ROW_H * r;
-    for (let k = 0; k < slots; k++) {
-      const x = wa.x + MARGIN + SLOT * k;
-      const busy = taken.some(
-        (t) => Math.abs(t.x - x) < SLOT && Math.abs(t.y - y) < ROW_H / 2,
-      );
-      if (!busy) return { x, y };
-    }
+// 같은 줄(세로 반 줄 안)에서 가로 w 안이면 겹친다
+const near = (a, b, w) =>
+  Math.abs(a.x - b.x) < w && Math.abs(a.y - b.y) < ROW_H / 2;
+
+// 새 캐릭터 자리. from(기준 캐릭터)이 있으면 그 바로 오른쪽 칸부터 같은 줄을 오른쪽으로, 없으면 바닥 왼쪽 칸부터.
+// taken(열린 창·허브·예약 자리)과 겹치면 다음 칸, 줄 끝이면 ROW_H 위 줄 왼쪽부터. 맨 오른쪽 칸은 접힌 창(SLOT 폭)이 화면 안.
+// 셋째 줄까지 차면: from이 있었으면 바닥 왼쪽부터 다시(기준 왼쪽 빈칸), 그래도 없으면 바닥 첫 칸에 겹친다
+export function placeNew(taken, wa, from) {
+  const left = wa.x + MARGIN;
+  const right = wa.x + wa.width - SLOT;
+  const y0 = from ? from.y : floorY(wa);
+  for (let r = 0; r < 3 && y0 - ROW_H * r >= wa.y; r++) {
+    const y = y0 - ROW_H * r;
+    for (let x = r === 0 && from ? from.x + SLOT : left; x <= right; x += SLOT)
+      if (!taken.some((t) => near(t, { x, y }, SLOT))) return { x, y };
   }
-  return { x: wa.x + MARGIN, y: floorY(wa) };
+  return from ? placeNew(taken, wa) : { x: left, y: floorY(wa) };
+}
+
+// 가장 낮은 줄(맨 아래 캐릭터와 반 줄 안)에서 가장 오른쪽 캐릭터. 없으면 undefined
+function lastInRow(anchors) {
+  const low = Math.max(...anchors.map((a) => a.y));
+  return anchors
+    .filter((a) => low - a.y < ROW_H / 2)
+    .reduce((m, a) => (m && m.x >= a.x ? m : a), undefined);
+}
+
+// 캐릭터 창을 만들 때의 자리 → { anchor, fresh }. fresh(새로 놓음)면 메인이 바로 저장해 예약한다.
+// saved(이 세션의 저장 자리)는 그대로 쓰되, 다른 열린 캐릭터가 그 자리(반 칸 안)에 있으면(옛 중복 저장) 새로 놓는다.
+// 새 자리: 가장 낮은 줄의 가장 오른쪽 캐릭터 바로 오른쪽, 그 캐릭터의 화면. 캐릭터가 없으면 허브 화면, 허브도 없으면 주 모니터 바닥 왼쪽부터.
+// pets: 열린 캐릭터 앵커(허브 제외), hub: 허브 앵커, reserved: 살아 있는 다른 세션(휴면 포함)의 저장 자리,
+// areaAt(앵커) → 그 캐릭터가 있는 화면의 작업 영역, primary: 주 모니터 작업 영역
+export function spotFor({ saved, pets, hub, reserved, areaAt, primary }) {
+  if (saved) {
+    const a = clampTo(areaAt(saved), saved);
+    if (!pets.some((p) => near(p, a, SLOT / 2))) return { anchor: a, fresh: false };
+  }
+  const from = lastInRow(pets);
+  const wa = from ? areaAt(from) : hub ? areaAt(hub) : primary;
+  const taken = [...pets, hub, ...reserved].filter(Boolean);
+  return { anchor: placeNew(taken, wa, from), fresh: true };
 }
 
 export const FACE_X = 64; // 창 왼쪽에서 캐릭터 중심까지(칸 padding 6 + 116/2, mini.css)
@@ -55,10 +82,11 @@ export function fitRoom(anchor, r, wa) {
 // 이 캐릭터가 어느 디스플레이에 있는지 고르는 기준점(창이 경계에 걸치면 캐릭터 중심이 있는 쪽)
 export const petCenter = (a) => ({ x: a.x + FACE_X, y: a.y + PET_H / 2 });
 
-// 80×60 캐릭터가 작업 영역 안에 있게
-export function clampTo(wa, anchor) {
+// 앵커를 작업 영역 안으로. 오른쪽 한계는 접힌 창 폭(w): 캐릭터 창은 SLOT(128) → 접힌 창은 오른쪽 끝에서도 밀리지 않아
+// shiftX = 0(밀린 채로 캐릭터 열을 옮기면 얼굴이 화면 밖으로 나간다). 허브는 PET_W를 넘긴다
+export function clampTo(wa, anchor, w = SLOT) {
   return {
-    x: Math.min(Math.max(anchor.x, wa.x), wa.x + wa.width - PET_W),
+    x: Math.min(Math.max(anchor.x, wa.x), wa.x + wa.width - w),
     y: Math.min(Math.max(anchor.y, wa.y), floorY(wa)),
   };
 }

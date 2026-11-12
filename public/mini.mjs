@@ -4,6 +4,8 @@
 // 인자 없는 /mini(옛 하단 띠, ADR 0005)는 없어졌다 → 큰 사무실("/")로 보낸다
 import { el, sync, setText, setAttr } from "./dom.mjs";
 import { fetchState, requestFocus } from "./api.mjs";
+import { linkEl } from "./common.mjs";
+import { draggable } from "./drag.mjs";
 import {
   visibleDesks,
   avatarState,
@@ -17,6 +19,9 @@ import {
   peekLines,
   elapsedShort,
   whereShort,
+  isBackground,
+  mdBlocks,
+  mdPlain,
 } from "./mini-model.mjs";
 import { avatarSvg } from "./mini-sprites.mjs";
 
@@ -40,6 +45,54 @@ let desks = [];
 let expanded = null; // 펼친 말풍선의 pid
 let peek = false; // 잠깐(0.15초) 올려두면 쪽지(위치·요청·지금·링크)를 편다
 let offlineSince = null;
+// 메인이 마지막으로 알려 준 창 사정(pet:fit·pet:drag 응답, pet:room) + 그때의 내용물 폭 w.
+// shiftX: 오른쪽 끝에 걸려 창이 앵커보다 왼쪽으로 밀린 px. roomAbove: 창이 아래 모서리에서 위로 자랄 수 있는 높이
+let room = null;
+let fitW = 0; // 마지막으로 보낸 내용물 폭
+
+// 펼친 말풍선의 마크다운(mini-model mdBlocks 토큰) → DOM. 응답 글은 믿지 않으므로 createElement·textContent로만 짓는다.
+// 링크는 linkEl(common.mjs): http(s)만 <a target=_blank rel=noopener>, 메인 setWindowOpenHandler가 기본 브라우저로 넘긴다
+const inlineEls = (tokens) =>
+  tokens.map((t) => {
+    if (t.t === "text") return document.createTextNode(t.v);
+    if (t.t === "code") return el("code", null, t.v);
+    if (t.t === "b") {
+      const b = el("strong");
+      b.append(...inlineEls(t.c));
+      return b;
+    }
+    const a = linkEl({ url: t.href });
+    a.textContent = t.v;
+    return a;
+  });
+function blockEl(b) {
+  if (b.type === "pre") return el("pre", null, b.text);
+  if (b.items) {
+    const list = el(b.type);
+    if (b.start !== 1) list.start = b.start;
+    for (const it of b.items) {
+      const li = el("li");
+      li.append(...inlineEls(it));
+      list.append(li);
+    }
+    return list;
+  }
+  const p = el("p", b.type === "h" ? "h" : null);
+  p.append(...inlineEls(b.inline));
+  return p;
+}
+// 쪽지 값: 글, 또는 링크 줄(링크 객체 배열 → 누르면 기본 브라우저로)
+function peekValue(v) {
+  if (typeof v === "string") return el("dd", null, v);
+  const dd = el("dd");
+  v.forEach((l, i) => {
+    if (i) dd.append(" · ");
+    const a = linkEl(l);
+    a.textContent = l.label;
+    dd.append(a);
+  });
+  return dd;
+}
 
 function make(d) {
   const cell = el("div", "cell");
@@ -80,6 +133,7 @@ function update(cell, d, now) {
   cell.dataset.pid = d.pid;
   // 상태 점·이름표 색·표지판은 CSS가 data-state·data-level로 고른다(설계 v2)
   setAttr(cell, "data-state", stateAttr(st));
+  cell.toggleAttribute("data-background", isBackground(d)); // 이름표 점: 빈 초록 고리
   setAttr(face, "aria-label", `${d.title} 터미널로`);
   const name = cell.querySelector(".name");
   setText(name.querySelector(".title"), d.title);
@@ -103,26 +157,33 @@ function update(cell, d, now) {
   if (pk.dataset.sig !== lsig) {
     pk.dataset.sig = lsig;
     pk.replaceChildren(
-      ...lines.flatMap(([k, v]) => [el("dt", null, k), el("dd", null, v)]),
+      ...lines.flatMap(([k, v]) => [el("dt", null, k), peekValue(v)]),
     );
   }
   pk.hidden = !lines.length;
   const bubble = cell.querySelector(".bubble");
   const text = open ? d.full : bubbleText(d);
   bubble.hidden = text == null;
-  setText(bubble, text ?? "");
+  // 펼침 = 가벼운 마크다운, 접힘(두 줄) = 기호를 벗긴 글. 글이 바뀔 때만 다시 짓는다(펼친 말풍선의 스크롤 유지)
+  const bsig = `${open}|${text}`;
+  if (bubble.sig !== bsig) {
+    bubble.sig = bsig;
+    if (open) bubble.replaceChildren(...mdBlocks(text).map(blockEl));
+    else setText(bubble, mdPlain(text ?? ""));
+  }
   bubble.dataset.pid = d.pid;
   if (canExpand(d)) delete bubble.dataset.static;
   else bubble.dataset.static = "";
   if (open) {
     bubble.dataset.open = "";
     cell.dataset.open = "";
-    // 창 상한(작업 영역 60%, pets.mjs fitBounds)에서 말풍선 밖의 높이(얼굴·이름표·여백)를 잰 만큼 뺀다.
-    // 상수(70)였을 땐 모습이 바뀌며 어긋나, 긴 응답을 펼치면 내용물이 창보다 커져 캐릭터가 창 아래로 밀렸다. 100vh는 지금 창 높이라 쓸 수 없다
+    // 창이 위로 자랄 수 있는 높이(메인의 roomAbove: 작업 영역 위 끝·60% 상한 중 작은 쪽)에서 말풍선 밖의 높이(얼굴·이름표·여백)를 잰 만큼 뺀다.
+    // 화면 위쪽에 둔 캐릭터도 이름표가 창 안에 남는다. 첫 응답 전에는 화면 60%로 대신. 100vh는 지금 창 높이라 쓸 수 없다
     const rest =
       cell.getBoundingClientRect().height -
       bubble.getBoundingClientRect().height;
-    bubble.style.maxHeight = `${Math.floor(screen.availHeight * 0.6) - Math.ceil(rest) - 1}px`;
+    const above = room?.roomAbove ?? Math.floor(screen.availHeight * 0.6);
+    bubble.style.maxHeight = `${Math.max(0, above - Math.ceil(rest) - 1)}px`;
   } else {
     delete bubble.dataset.open;
     delete cell.dataset.open;
@@ -130,6 +191,9 @@ function update(cell, d, now) {
   }
   cell.classList.toggle("offline", offlineSince != null);
 }
+
+// 칸 자식의 레이아웃상 오른쪽 끝(px). translate(applyShift)는 레이아웃을 안 바꾸므로 열을 옮겨도 이 값은 그대로다
+const rightOf = (c) => c.offsetLeft + c.offsetWidth;
 
 // 펫 모드: 창을 캐릭터(말풍선·표지판·문구 포함) 크기에 맞춘다. body는 height:100%라 못 쓰고 .cell을 잰다.
 // 호버로 이름표가 넓어지는 것까지 따라가도록 ResizeObserver가 부른다. 같은 값은 다시 보내지 않는다
@@ -141,16 +205,41 @@ function sendFit() {
   const d = desks.find((x) => x.pid === petPid);
   const bubbleShown = !cell.querySelector(".bubble").hidden;
   const top = bubbleShown || expanded != null || d?.state === "waiting" || peek;
-  // 칸 폭은 고정(가운데 축)이고 쪽지·펼친 말풍선·늘어난 이름표는 그 오른쪽으로 넘친다 → 넘칠 땐 scrollWidth + 그림자 여백
+  // 칸 폭은 고정(가운데 축)이고 쪽지·펼친 말풍선·늘어난 이름표는 그 오른쪽으로 넘친다 → 넘칠 땐 가장 오른쪽 끝 + 그림자 여백.
+  // scrollWidth는 옮긴(translate) 열까지 넣어 폭 → shiftX → 폭 되먹임이 생기므로 레이아웃 값으로 잰다
   const r = cell.getBoundingClientRect();
-  const w = Math.ceil(
-    cell.scrollWidth > cell.clientWidth ? cell.scrollWidth + 10 : r.width,
-  );
+  const right = Math.max(...[...cell.children].map(rightOf));
+  const w = Math.ceil(right > cell.clientWidth ? right + 10 : r.width);
   const h = Math.ceil(r.height);
   const key = `${w}x${h}|${top}`;
   if (key === lastFit) return;
   lastFit = key;
-  window.agentOffice?.fit(w, h, { top });
+  fitW = w;
+  window.agentOffice?.fit(w, h, { top }).then((rm) => setRoom(rm, w));
+}
+
+// 오른쪽 끝에 걸려 창이 shiftX만큼 왼쪽으로 밀렸으면 칸의 자식을 그만큼 오른쪽으로 옮긴다(translate) → 캐릭터는 화면 제자리.
+// 단 그 응답 때의 창 폭(room.w)에서 칸 여백 6을 뺀 곳 밖으로는 안 옮긴다: 쪽지·펼친 말풍선·늘어난 이름표처럼 넓은 것은 덜(4 이하) 옮겨져
+// 창 왼쪽부터 놓이고, 열 폭(116) 안의 것은 전부 옮겨져 얼굴 축에 남는다.
+// 얼굴(오른쪽 끝 104)은 늘 shiftX 전부: clampTo가 앵커를 작업 영역 오른쪽 - 128 안에 두므로 창 폭 - shiftX ≥ 128
+function applyShift() {
+  const cell = row.firstElementChild;
+  if (!cell) return;
+  const s = room?.shiftX ?? 0;
+  const limit = Math.max(room?.w ?? 0, cell.clientWidth) - 6;
+  for (const c of cell.children) {
+    const dx = Math.max(0, Math.min(s, limit - rightOf(c)));
+    const v = dx ? `${dx}px` : "";
+    if (c.style.translate !== v) c.style.translate = v;
+  }
+}
+// 메인의 응답(fit·drag) 또는 알림(onRoom)을 받는다. 위로 자랄 높이가 바뀌었으면 펼친 말풍선 상한을 다시 잡는다
+function setRoom(r, w) {
+  if (!r) return; // false: 메인이 이 창을 모른다
+  const reflow = expanded != null && r.roomAbove !== room?.roomAbove;
+  room = { ...r, w };
+  if (reflow) render();
+  else applyShift();
 }
 const ro =
   pet && "ResizeObserver" in window ? new ResizeObserver(sendFit) : null;
@@ -167,7 +256,6 @@ function render() {
     make,
     (n, d) => update(n, d, now),
   );
-  document.body.classList.toggle("offline", offlineSince != null);
 
   const cell = row.firstElementChild;
   if (cell && observed !== cell) {
@@ -176,17 +264,26 @@ function render() {
     for (const c of cell.children) ro?.observe(c); // 칸 폭이 고정이라 넘치는 자식(이름표·말풍선·쪽지)의 크기 변화도 따로 본다
   }
   sendFit();
+  applyShift();
 }
 
+// 1초마다 자기 세션만(/api/state?pid=N) 받는다. 창이 안 보이는 동안(허브의 숨김 토글 → document.hidden)은 쉬고,
+// 다시 보이면 visibilitychange가 곧바로 한 번 부른다. polling: 받는 중에 다시 불려 고리가 둘이 되지 않게
+let pollTimer;
+let polling = false;
 async function poll() {
+  clearTimeout(pollTimer);
+  if (polling || document.hidden) return;
+  polling = true;
   try {
-    ({ desks } = await fetchState());
+    ({ desks } = await fetchState(petPid));
     offlineSince = null;
   } catch {
     offlineSince ??= Date.now();
   }
+  polling = false;
   render();
-  setTimeout(poll, 1000);
+  pollTimer = setTimeout(poll, 1000);
 }
 
 let msgTimer;
@@ -208,8 +305,10 @@ const toggleExpand = (pid) => {
   render();
 };
 
-// 한 번 클릭은 말풍선 펼침·접힘만. 얼굴·이름표는 아무 일도 하지 않는다(끌기·더블클릭과 섞이지 않게)
+// 한 번 클릭은 말풍선 펼침·접힘만. 얼굴·이름표는 아무 일도 하지 않는다(끌기·더블클릭과 섞이지 않게).
+// 링크(펼친 말풍선·쪽지)는 기본 브라우저로 열릴 뿐 말풍선을 접지 않는다
 document.addEventListener("click", (e) => {
+  if (e.target.closest("a")) return;
   const a = e.target.closest("[data-action]");
   if (a?.dataset.action === "bubble" && a.dataset.static === undefined)
     toggleExpand(Number(a.dataset.pid));
@@ -223,7 +322,6 @@ document.addEventListener("keydown", (e) => {
 
 // ── 펫 모드: 끌기·더블클릭·우클릭 ──
 if (pet) {
-  let drag = null; // { gx, gyb(창 왼쪽·아래 기준으로 잡은 점), sx, sy, moved }
   const grabbable = (t) => t.closest?.(".face, .name");
   const cellOf = () => row.firstElementChild;
   // 쪽지: 창 = 캐릭터라 창에 들어온 것이 곧 올려둔 것. 스쳐 지나갈 땐 안 뜨게 0.15초, 누르면(끌기·메뉴) 접는다
@@ -240,35 +338,22 @@ if (pet) {
     peekTimer = setTimeout(() => setPeek(true), 150);
   });
   root.addEventListener("mouseleave", () => setPeek(false));
-  document.addEventListener("mousedown", () => setPeek(false), true);
-  document.addEventListener("mousedown", (e) => {
-    if (e.button !== 0 || !grabbable(e.target)) return;
-    drag = {
-      gx: e.clientX,
-      gyb: innerHeight - e.clientY, // 창 아래 기준(끌던 중 창 높이가 바뀌어도 어긋나지 않게)
-      sx: e.screenX,
-      sy: e.screenY,
-      moved: false,
-    };
+  // 쪽지의 링크를 누를 땐 쪽지를 접지 않는다(접으면 클릭이 링크에 닿지 않는다)
+  document.addEventListener(
+    "mousedown",
+    (e) => e.target.closest?.("a") || setPeek(false),
+    true,
+  );
+  // 얼굴·이름표 끌기. 창이 오른쪽 끝에 걸려 밀린 상태(shiftX)에서 잡아도 앵커 기준으로 바꿔 튀지 않는다
+  draggable({
+    canStart: (e) => grabbable(e.target),
+    shiftX: () => room?.shiftX ?? 0,
+    onStart: () => cellOf()?.classList.add("dragging"), // 들림 + 둥둥 정지 + 그림자 옅게
+    onEnd: () => cellOf()?.classList.remove("dragging"),
+    onRoom: (r) => setRoom(r, fitW),
   });
-  document.addEventListener("mousemove", (e) => {
-    if (!drag) return;
-    if (!drag.moved) {
-      if (Math.abs(e.screenX - drag.sx) + Math.abs(e.screenY - drag.sy) <= 4)
-        return;
-      drag.moved = true;
-      cellOf()?.classList.add("dragging"); // 들림 + 둥둥 정지 + 그림자 옅게
-    }
-    window.agentOffice?.dragTo(e.screenX - drag.gx, e.screenY + drag.gyb);
-  });
-  const endDrag = () => {
-    if (!drag) return;
-    if (drag.moved) window.agentOffice?.dragEnd();
-    drag = null;
-    cellOf()?.classList.remove("dragging");
-  };
-  document.addEventListener("mouseup", endDrag);
-  document.addEventListener("mouseleave", endDrag);
+  // 메인이 스스로 창을 옮겼을 때(허브 정렬·디스플레이 변경)
+  window.agentOffice?.onRoom((r) => setRoom(r, fitW));
   document.addEventListener("dblclick", (e) => {
     const t = grabbable(e.target);
     if (!t) return;
@@ -287,6 +372,7 @@ if (pet) {
       (await window.agentOffice?.menu(petPid, {
         canExpand: !!d && canExpand(d),
         expanded: expanded === petPid,
+        copy: d ? d.full || bubbleText(d) : null, // "응답 복사": 전문, 없으면 보이는 말풍선 글
       })) ?? {};
     cell.classList.remove("menu");
     if (r.focus) focusDesk(cell, petPid);
@@ -306,5 +392,6 @@ document.addEventListener("visibilitychange", setStill);
 setStill();
 if (pet) {
   addEventListener("resize", render);
+  document.addEventListener("visibilitychange", () => document.hidden || poll());
   poll();
 }

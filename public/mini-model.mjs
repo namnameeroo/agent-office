@@ -51,19 +51,136 @@ export function expandedAfter(expanded, list) {
 const WHY = { permission: "승인", question: "질문" };
 export const signText = (d) => WHY[d.reason] ?? "답 필요";
 
-// 올려두면 뜨는 쪽지: [라벨, 글] 줄. 큰 창을 열지 않고 "어디·뭘 시켰지·지금 뭐 하지"를 본다. 없는 값은 줄째 뺀다
+// 턴은 끝났고 백그라운드 명령(dev 서버 등)만 살아 있는 작업 중 세션(서버 background, Claude Code status "shell").
+// 작업 중으로 두되 이름표 점을 빈 고리로, 쪽지 "지금"을 따로 말한다
+export const isBackground = (d) => d.state === "working" && d.background === true;
+
+// 올려두면 뜨는 쪽지: [라벨, 값] 줄. 큰 창을 열지 않고 "어디·뭘 시켰지·지금 뭐 하지"를 본다. 없는 값은 줄째 뺀다.
+// 링크 줄의 값만 링크 객체 배열({ kind, label, url })이다 — 화면이 누를 수 있게 그린다
 export function peekLines(d) {
   const where = [d.zone, d.worktree, d.branch]
     .filter((x, i, a) => x && a.indexOf(x) === i) // worktree 이름 = 브랜치 이름이면 한 번만
     .join(" · ");
-  const act = d.state === "working" ? d.activity?.[0] : null; // activity는 최신순
+  // activity는 최신순. 내용 없는 "생각"보다 내용이 있는 가장 최근 활동, 없으면 최신 것
+  const acts = d.state === "working" ? (d.activity ?? []) : [];
+  const act = acts.find((a) => a.detail) ?? acts[0];
+  const now = isBackground(d)
+    ? "백그라운드 명령만 실행 중"
+    : act
+      ? `${act.verb} ${act.detail ?? ""}`.trim()
+      : "";
+  const links = latestLinks(d.links ?? []);
   return [
     ["위치", where],
     ["요청", firstLine(d.lastPrompt ?? "").trim()],
-    ["지금", act ? `${act.verb} ${act.detail ?? ""}`.trim() : ""],
-    ["링크", latestLinks(d.links ?? []).map((l) => l.label).join(" · ")],
+    ["지금", now],
+    ["링크", links.length ? links : ""],
   ].filter(([, v]) => v);
 }
+
+// ── 펼친 말풍선의 가벼운 마크다운 ──
+// 글은 에이전트 출력이라 믿지 않는다: 여기서는 구조(토큰)만 만들고 DOM은 mini.mjs가 createElement·textContent로만 짓는다(innerHTML 없음).
+// 블록: 문단(빈 줄로 나눔, 줄바꿈 유지) · 제목(# ~ ######) · 목록(- * + / 1. 1), 들여 쓴 다음 줄은 그 항목에 이어 붙임) ·
+//   코드 블록(``` ~~~)과 표(|로 시작하는 줄)는 고정폭 글 그대로.
+// 인라인: **굵게** · `코드` · [글](http(s) 주소) · 맨 http(s) 주소. http(s)가 아닌 링크는 원문 글자 그대로.
+// ponytail: 기울임·인용·중첩 목록 들여쓰기·이미지·__굵게__(파이썬 __init__과 헷갈림)는 다루지 않는다 — 글자 그대로 보인다
+const INLINE =
+  /`([^`\n]+)`|\*\*(.+?)\*\*|\[([^\]\n]+)\]\(([^)\s]+)\)|(https?:\/\/[\w\-.~:/?#@!$&'*+,;=%]+)/g;
+const isWeb = (u) => /^https?:\/\//.test(u); // linkEl(common.mjs)·메인 setWindowOpenHandler와 같은 기준
+
+export function mdInline(s) {
+  const out = [];
+  const text = (v) => {
+    if (!v) return;
+    const last = out.at(-1);
+    if (last?.t === "text") last.v += v;
+    else out.push({ t: "text", v });
+  };
+  let at = 0;
+  for (const m of s.matchAll(INLINE)) {
+    const [all, code, bold, label, href, url] = m;
+    text(s.slice(at, m.index));
+    at = m.index + all.length;
+    if (code != null) out.push({ t: "code", v: code });
+    else if (bold != null) out.push({ t: "b", c: mdInline(bold) });
+    else if (label != null) {
+      if (isWeb(href)) out.push({ t: "a", v: label, href });
+      else text(all);
+    } else {
+      const tail = /[.,;:!?'*]+$/.exec(url)?.[0] ?? ""; // 문장 끝 구두점은 주소가 아니다
+      const u = url.slice(0, url.length - tail.length);
+      out.push({ t: "a", v: u, href: u });
+      text(tail);
+    }
+  }
+  text(s.slice(at));
+  return out;
+}
+
+// → [{ type: "p"|"h", inline } | { type: "ul"|"ol", start, items: [inline] } | { type: "pre", text }]
+export function mdBlocks(src) {
+  const lines = String(src ?? "").replace(/\r\n?/g, "\n").split("\n");
+  const out = [];
+  let open = null; // 다음 줄을 이어 붙일 블록(문단·목록·표)
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const fence = /^\s*(`{3,}|~{3,})/.exec(line);
+    if (fence) {
+      const body = [];
+      while (++i < lines.length && !lines[i].trimStart().startsWith(fence[1]))
+        body.push(lines[i]);
+      out.push({ type: "pre", text: body.join("\n") });
+      open = null;
+      continue;
+    }
+    if (!line.trim()) {
+      open = null;
+      continue;
+    }
+    const h = /^\s{0,3}#{1,6}\s+(.*)$/.exec(line);
+    if (h) {
+      out.push({ type: "h", text: h[1] });
+      open = null;
+      continue;
+    }
+    const li = /^\s*(?:[-*+]|(\d{1,9})[.)])\s+(.*)$/.exec(line);
+    if (li) {
+      const type = li[1] ? "ol" : "ul";
+      if (open?.type !== type) {
+        open = { type, start: Number(li[1] ?? 1), items: [] };
+        out.push(open);
+      }
+      open.items.push(li[2]);
+    } else if (/^\s*\|/.test(line)) {
+      if (open?.type === "pre") open.text += `\n${line}`;
+      else out.push((open = { type: "pre", text: line }));
+    } else if (open?.items && /^\s/.test(line)) {
+      open.items[open.items.length - 1] += `\n${line.trim()}`;
+    } else if (open?.type === "p") open.text += `\n${line}`;
+    else out.push((open = { type: "p", text: line }));
+  }
+  return out.map((b) =>
+    b.items
+      ? { ...b, items: b.items.map(mdInline) }
+      : b.type === "pre"
+        ? b
+        : { type: b.type, inline: mdInline(b.text) },
+  );
+}
+
+// 접힌 두 줄 말풍선: 기호를 벗긴 글만(목록 표시·#·**·`·[](주소) 없이)
+const plain = (tokens) =>
+  tokens.map((t) => (t.t === "b" ? plain(t.c) : t.v)).join("");
+export const mdPlain = (s) =>
+  mdBlocks(s)
+    .map((b) =>
+      b.type === "pre"
+        ? b.text
+        : b.items
+          ? b.items.map(plain).join(" ")
+          : plain(b.inline),
+    )
+    .join(" ");
 
 // 이름표용 짧은 경과: 단위 하나만(7m · 5h · 5d). 이름표 폭 120px에서 제목 자리를 남긴다
 export function elapsedShort(ms) {

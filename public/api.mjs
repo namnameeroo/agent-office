@@ -1,7 +1,8 @@
 // 서버 호출만 모은 모듈. 큰 창(app.mjs)과 미니 모드(mini.mjs)가 같은 계약을 쓴다. DOM 접근 없음.
 
-export async function fetchState() {
-  const r = await fetch("/api/state", {
+// pid를 주면 desks를 그 세션 하나로 거른다(캐릭터 창). counts 등은 전체 기준 그대로
+export async function fetchState(pid) {
+  const r = await fetch(pid == null ? "/api/state" : `/api/state?pid=${pid}`, {
     cache: "no-store",
     signal: AbortSignal.timeout(1500),
   });

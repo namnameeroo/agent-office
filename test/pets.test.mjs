@@ -8,6 +8,7 @@ import {
   arrangeAll,
   fitRoom,
   petCenter,
+  spotFor,
 } from "../desktop/pets.mjs";
 
 const WA = { x: 0, y: 25, width: 1440, height: 875 };
@@ -69,9 +70,12 @@ test("fitBounds: 왼쪽 아래 고정, 오른쪽 끝에서는 왼쪽으로 밀�
   assert.equal(big.y + big.height, 900); // 아래 모서리 유지
 });
 
-test("clampTo: 화면 밖 위치를 안으로", () => {
+test("clampTo: 화면 밖 위치를 안으로. 캐릭터 창 오른쪽 한계 = 접힌 창 폭(SLOT 128), 허브는 PET_W(80)", () => {
   assert.deepEqual(clampTo(WA, { x: -50, y: 5000 }), { x: 0, y: 830 });
-  assert.deepEqual(clampTo(WA, { x: 2000, y: 0 }), { x: 1360, y: 25 });
+  assert.deepEqual(clampTo(WA, { x: 2000, y: 0 }), { x: 1312, y: 25 }); // 1440 - 128
+  assert.deepEqual(clampTo(WA, { x: 1340, y: 830 }), { x: 1312, y: 830 }); // 전: 그대로 1340 → 접힌 창이 28 밀림
+  assert.deepEqual(clampTo(WA, { x: 1312, y: 830 }), { x: 1312, y: 830 });
+  assert.deepEqual(clampTo(WA, { x: 2000, y: 0 }, 80), { x: 1360, y: 25 }); // 허브
 });
 
 test("prunePositions: 지금 책상 목록(휴면 포함)에 없는 pid만 지운다", () => {
@@ -170,4 +174,133 @@ test("보조 모니터: 그 화면의 작업 영역으로 맞추면 주 모니�
 test("petCenter: 디스플레이를 고르는 기준점 = 캐릭터 중심(창 왼쪽 + 64, 바닥 칸 가운데). 경계에 걸치면 중심이 있는 화면", () => {
   assert.deepEqual(petCenter({ x: 300, y: 912 }), { x: 364, y: 947 });
   assert.ok(petCenter({ x: -50, y: 700 }).x > 0); // 창 왼쪽은 왼쪽 모니터, 캐릭터 중심은 주 모니터
+});
+
+test("clampTo → fitBounds·fitRoom: 오른쪽 끝에 끌어다 놓아도 접힌 캐릭터 창(128)은 shiftX 0, 쪽지(248)를 펴면 밀린 만큼만", () => {
+  const a = clampTo(WA2, { x: 5000, y: 912 });
+  assert.equal(a.x, 1512 - 128);
+  const folded = fitBounds(a, 128, 136, WA2);
+  assert.equal(folded.x, a.x);
+  assert.equal(fitRoom(a, folded, WA2).shiftX, 0);
+  const peek = fitBounds(a, 248, 200, WA2);
+  assert.equal(fitRoom(a, peek, WA2).shiftX, 120);
+  // 밀린 창 안에서 캐릭터 열(폭 128)을 shiftX만큼 옮겨도 창 안에 들어간다: 창 폭 - shiftX ≥ 128
+  assert.ok(peek.width - fitRoom(a, peek, WA2).shiftX >= 128);
+});
+
+// ── 새 캐릭터 자리: 기준(from) = 가장 낮은 줄의 가장 오른쪽 캐릭터. WA2 바닥 줄 y 912 ──
+
+test("placeNew(from): 기준 캐릭터 바로 오른쪽(+SLOT, 같은 줄) — 휴면으로 빈 왼쪽 칸을 채우지 않는다", () => {
+  // 24가 비어 있어도(휴면) 280 오른쪽 408. 전: 24
+  const open = [
+    { x: 152, y: 912 },
+    { x: 280, y: 912 },
+  ];
+  assert.deepEqual(placeNew(open, WA2, { x: 280, y: 912 }), { x: 408, y: 912 });
+  // 끌어 둔 칸 밖 위치여도 기준의 x·y를 그대로 따른다
+  const off = { x: 300, y: 700 };
+  assert.deepEqual(placeNew([off], WA2, off), { x: 428, y: 700 });
+});
+
+test("placeNew(from): 오른쪽 칸이 예약 자리·허브·다른 캐릭터면 다음 칸", () => {
+  const from = { x: 280, y: 912 };
+  // 408 = 휴면 세션 저장 자리, 560 = 허브(536·664 두 칸에 걸침) → 792
+  assert.deepEqual(
+    placeNew([from, { x: 408, y: 912 }, { x: 560, y: 912 }], WA2, from),
+    { x: 792, y: 912 },
+  );
+});
+
+test("placeNew(from): 맨 오른쪽 칸 x ≤ 작업 영역 오른쪽 - SLOT(접힌 창 폭), 줄이 차면 ROW_H 위 줄 왼쪽부터", () => {
+  // WA2 오른쪽 끝 1512 → 칸 x 한계 1384
+  const a = { x: 1250, y: 912 };
+  assert.deepEqual(placeNew([a], WA2, a), { x: 1378, y: 912 });
+  const b = { x: 1300, y: 912 };
+  assert.deepEqual(placeNew([b], WA2, b), { x: 24, y: 742 }); // 1428 > 1384
+  // 기준 오른쪽과 위 두 줄이 다 차면 바닥 줄의 빈칸(기준 왼쪽)으로, 그것도 없으면 바닥 첫 칸에 겹친다
+  const row = (y) =>
+    Array.from({ length: 11 }, (_, k) => ({ x: 24 + 128 * k, y }));
+  const last = { x: 1304, y: 912 };
+  assert.deepEqual(placeNew([...row(742), ...row(572), last], WA2, last), {
+    x: 24,
+    y: 912,
+  });
+  assert.deepEqual(
+    placeNew([...row(912), ...row(742), ...row(572)], WA2, last),
+    { x: 24, y: 912 },
+  );
+});
+
+// 실측 모니터 배치(사용자 Mac): 주 모니터(노트북, WA2) + 그 위 1920×1080 두 대. 위 화면 바닥 줄 y = -1055 + 1055 - 70 = -70
+const UP_L = { x: -1110, y: -1055, width: 1920, height: 1055 };
+const UP_R = { x: 810, y: -1055, width: 1920, height: 1055 };
+// 메인 areaAt(가장 가까운 디스플레이) 대역: 캐릭터 중심이 든 위 화면, 아니면 주 모니터
+const areaAt = (a) => {
+  const c = petCenter(a);
+  return (
+    [UP_L, UP_R].find(
+      (w) =>
+        c.x >= w.x && c.x < w.x + w.width && c.y >= w.y && c.y < w.y + w.height,
+    ) ?? WA2
+  );
+};
+const spot = (o) => spotFor({ pets: [], reserved: [], areaAt, primary: WA2, ...o });
+
+test("spotFor: 새 캐릭터는 기준 캐릭터가 있는 화면에 — 주 모니터로 내려오지 않는다", () => {
+  const up = { x: 900, y: -70 }; // 오른쪽 위 화면 바닥 줄. 전: 주 모니터 (24, 912)
+  assert.deepEqual(spot({ pets: [up] }), {
+    anchor: { x: 1028, y: -70 },
+    fresh: true,
+  });
+});
+
+test("spotFor: 기준 = 가장 낮은 줄(맨 아래와 반 줄 안)의 가장 오른쪽 캐릭터", () => {
+  const pets = [
+    { x: 24, y: 912 },
+    { x: 536, y: 905 }, // 912와 같은 줄
+    { x: 900, y: 742 },
+    { x: 1300, y: -70 },
+  ];
+  assert.deepEqual(spot({ pets }).anchor, { x: 664, y: 905 });
+});
+
+test("spotFor: 캐릭터가 없으면 허브가 있는 화면의 바닥 왼쪽, 허브도 없으면 주 모니터 바닥 왼쪽", () => {
+  assert.deepEqual(spot({ hub: { x: 2500, y: -70 } }).anchor, { x: 834, y: -70 });
+  assert.deepEqual(spot({ hub: { x: 1407, y: 94 } }).anchor, { x: 24, y: 912 }); // 실측 허브(주 모니터 위쪽)
+  assert.deepEqual(spot({}).anchor, { x: 24, y: 912 });
+});
+
+test("spotFor: 살아 있는 다른 세션(휴면 포함)의 저장 자리와 허브를 건너뛴다. 새 자리는 fresh(바로 저장해 예약)", () => {
+  const pets = [
+    { x: 24, y: 912 },
+    { x: 152, y: 912 },
+  ];
+  assert.deepEqual(
+    spot({ pets, reserved: [{ x: 280, y: 912 }], hub: { x: 408, y: 912 } }),
+    { anchor: { x: 536, y: 912 }, fresh: true },
+  );
+});
+
+test("spotFor: 저장 자리로 다시 만든다. 다른 열린 캐릭터가 그 자리를 쓰면 새 규칙으로(실측 중복 (664,912))", () => {
+  const saved = { x: 664, y: 912 };
+  assert.deepEqual(
+    spot({ saved, pets: [{ x: 536, y: 912 }, { x: 900, y: 912 }] }),
+    { anchor: saved, fresh: false },
+  );
+  // 끌어서 가까이 둔 이웃(반 칸 이상 떨어짐)은 같은 자리가 아니다
+  assert.deepEqual(spot({ saved, pets: [{ x: 564, y: 912 }] }).anchor, saved);
+  // 실측: 707·17360이 둘 다 (664,912). 먼저 깬 쪽이 열려 있으면 나중 쪽은 기준(가장 오른쪽 664) 오른쪽으로
+  assert.deepEqual(
+    spot({
+      saved,
+      pets: [{ x: 24, y: 912 }, { x: 664, y: 912 }],
+      reserved: [{ x: 664, y: 912 }],
+    }),
+    { anchor: { x: 792, y: 912 }, fresh: true },
+  );
+  // 위 화면의 저장 자리도 그대로(주 모니터로 끌어오지 않는다)
+  assert.deepEqual(spot({ saved: { x: 900, y: -70 } }), {
+    anchor: { x: 900, y: -70 },
+    fresh: false,
+  });
 });

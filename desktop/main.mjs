@@ -1,6 +1,6 @@
 // Electron 껍데기. server.mjs를 앱 안에서 그대로 띄우고 그 주소를 창에 연다. 화면(public/)·수집(lib/) 코드는 건드리지 않는다.
 // 창은 큰 사무실("/") 하나와, 미니 모드일 때 세션마다 하나씩 뜨는 투명 캐릭터 창("/mini?pid=N")이다(ADR 0006).
-import { app, BrowserWindow, Menu, ipcMain, screen, shell } from "electron";
+import { app, BrowserWindow, Menu, clipboard, ipcMain, screen, shell } from "electron";
 import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
@@ -10,7 +10,7 @@ import { visibleDesks } from "../public/mini-model.mjs";
 import {
   PET_W,
   PET_H,
-  placeNew,
+  spotFor,
   fitBounds,
   fitRoom,
   petCenter,
@@ -109,23 +109,31 @@ function place(p) {
   p.win.setBounds(r);
   return fitRoom(p.anchor, r, wa);
 }
-// 앵커를 옮긴다(그 지점에서 가장 가까운 화면의 작업 영역 안으로)
+// 앵커를 옮긴다(그 지점에서 가장 가까운 화면의 작업 영역 안으로). 캐릭터 창의 오른쪽 한계는 접힌 창 폭(clampTo 기본), 허브는 PET_W
 function moveTo(p, anchor) {
-  p.anchor = clampTo(areaAt(anchor), anchor);
+  p.anchor = clampTo(areaAt(anchor), anchor, p.pid === HUB ? PET_W : undefined);
   return place(p);
 }
 // 메인이 스스로 옮길 때(정렬·디스플레이 변경)는 렌더러가 묻지 않았으므로 같은 값을 보낸다
 const relocate = (p, anchor) =>
   p.win.webContents.send("pet:room", moveTo(p, anchor));
 
+// 자리 규칙은 pets.mjs spotFor. 새로 놓은 자리는 바로 저장해 예약한다(휴면해도 다른 새 캐릭터가 못 가져간다)
 function createPet(pid) {
-  const saved = positions[pid];
-  const anchor = saved
-    ? clampTo(areaAt(saved), saved)
-    : placeNew(
-        [...pets.values()].map((p) => p.anchor),
-        primaryArea(),
-      );
+  const { anchor, fresh } = spotFor({
+    saved: positions[pid],
+    pets: [...pets.values()].filter((p) => p.pid !== HUB).map((p) => p.anchor),
+    hub: pets.get(HUB)?.anchor,
+    reserved: Object.entries(positions)
+      .filter(([k]) => k !== String(pid))
+      .map(([, v]) => v),
+    areaAt,
+    primary: primaryArea(),
+  });
+  if (fresh) {
+    positions[pid] = anchor;
+    savePositions();
+  }
   const win = openWindow(`/mini?pid=${pid}`, {
     x: anchor.x,
     y: anchor.y,
@@ -158,7 +166,7 @@ function createHub() {
   const wa = primaryArea();
   const saved = positions[HUB];
   const anchor = saved
-    ? clampTo(areaAt(saved), saved)
+    ? clampTo(areaAt(saved), saved, PET_W)
     : { x: wa.x + wa.width - 24 - 100, y: wa.y + wa.height - PET_H }; // 기본: 바닥 오른쪽
   const win = openWindow("/mini?hub=1", {
     x: anchor.x,
@@ -314,6 +322,9 @@ ipcMain.handle("pet:menu", (e, pid, info) => {
         label: info.expanded ? "말풍선 접기" : "말풍선 전문 보기",
         click: () => (picked = { expand: !info.expanded }),
       });
+    // 캐릭터 창은 키 입력을 뺏지 않는 패널이라 ⌘C에 기댈 수 없다. 렌더러가 준 글(전문, 없으면 보이는 말풍선)을 클립보드로
+    if (typeof info?.copy === "string" && info.copy)
+      items.push({ label: "응답 복사", click: () => clipboard.writeText(info.copy) });
     items.push(
       { type: "separator" },
       { label: "Agent Office 종료", click: () => app.quit() },
