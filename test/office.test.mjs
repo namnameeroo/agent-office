@@ -889,3 +889,16 @@ test("buildOffice: background — 턴·위임 작업 없이 백그라운드 셸�
   );
   assert.equal(o.counts.working, 3);
 });
+
+test("classifyDesk: 백그라운드 세션(kind bg)은 쉬는 기준이 대화 기록의 마지막 시각 — 재기동이 statusUpdatedAt을 새로 써도 휴면. 대화형은 그대로", () => {
+  const restarted = { status: "idle", statusUpdatedAt: NOW - M }; // supervisor가 막 다시 띄움
+  const old = sum({ lastEventAt: NOW - 9 * H });
+  const bg = (o = {}) => term(1, { ...restarted, kind: "bg", ...o });
+  assert.deepEqual(classifyDesk(bg(), old, [], NOW), st("dormant", null, NOW - 9 * H));
+  assert.deepEqual(
+    classifyDesk(bg(), sum({ lastEventAt: NOW - 5 * M }), [], NOW),
+    st("resting", null, NOW - 5 * M),
+  );
+  assert.deepEqual(classifyDesk(bg(), sum(), [], NOW), st("resting", null, NOW - M)); // 기록이 없으면 statusUpdatedAt
+  assert.deepEqual(classifyDesk(term(1, restarted), old, [], NOW), st("resting", null, NOW - M)); // 대화형은 지금처럼
+});

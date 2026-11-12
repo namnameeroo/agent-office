@@ -93,6 +93,15 @@ const server = createServer((req, res) => {
       const desk = latest?.desks.find((d) => d.pid === pid);
       if (!desk)
         return json(404, { ok: false, reason: "그 팀장을 찾지 못했다" });
+      // 백그라운드 세션은 붙은 터미널이 없고 env는 supervisor를 띄운 터미널 것이라 포커스하면 엉뚱한 탭으로 간다.
+      // focus.mjs를 타지 않고 다시 붙는 명령을 안내한다. 대화형은 아래 줄 그대로(ADR 0007)
+      if (desk.kind === "bg")
+        return json(200, {
+          ok: false,
+          reason: desk.jobId
+            ? `백그라운드 세션이다. 터미널에서 claude attach ${desk.jobId}`
+            : "백그라운드 세션이라 붙은 터미널이 없다",
+        });
       json(200, await focusTerminal(desk));
     });
     return;

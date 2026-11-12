@@ -1,0 +1,28 @@
+---
+status: accepted
+date: 2026-11-12
+---
+
+# 백그라운드 세션(`claude agents`·`--bg`·`/bg`)도 팀장으로 앉히고, 칠판 클릭은 다시 붙는 명령을 안내한다
+
+**결정**: 세션 파일(`~/.claude/sessions/<pid>.json`)을 `kind` 허용 목록 `{interactive, bg}`로 읽는다. `bg` 세션은 대화형과 같은 구역·상태 규칙으로 팀장 자리에 앉힌다. **[사용자 2026-11-12]** 터미널에서 `claude agents`로 띄운 세션이 사무실에 안 보이는 문제. bg 칠판 클릭은 터미널 이동이 불완전해도 되지만, 대화형 칠판 클릭은 이전과 같아야 한다.
+
+| 항목 | 결정 | 이유 |
+| --- | --- | --- |
+| 읽는 kind | `interactive`, `bg`만(허용 목록) | `daemon` 등은 사람이 대화하는 세션이 아니다. 형식이 바뀌면 bg가 예전처럼 빠지기만 한다(안전한 실패) |
+| 대화형 보존 | `kind`·`jobId`는 **bg 객체에만** 붙인다. 대화형 터미널·책상 객체는 이전과 같다 | 칠판 클릭·상태 판정이 대화형에서 바뀌지 않았음을 테스트 하나로 고정한다(`collectOffice`: bg가 함께 있어도 대화형 책상 deepEqual) |
+| 칠판 클릭(bg) | `server.mjs` `/api/focus`에서 `kind === "bg"`면 `focus.mjs`를 타지 않고 `{ ok:false, reason:"… claude attach <jobId>" }`. 화면은 기존 실패 문구 4초 경로로 보여준다 | bg 프로세스의 env는 supervisor를 띄운 터미널 것이라 env로 찾으면 엉뚱한 탭으로 간다. ADR 0003의 "포커스만, 입력·프로세스 실행 없음"도 지킨다. `focus.mjs`는 diff 0 |
+| 휴식·휴면(bg) | 쉰 기준 시각 = 대화 기록의 마지막 시각(`summary.lastEventAt`, 없으면 `statusUpdatedAt`) | supervisor가 재기동하며 `statusUpdatedAt`을 새로 써, 몇 주 쉰 세션이 "휴식 5분"으로 보였다 |
+| `jobId` | `/^[\w-]{1,64}$/`만 받고 아니면 null(안내 문구에서 명령을 뺀다) | 화면에 문자열로만 쓰지만 형식 밖 값은 싣지 않는다 |
+
+## 하지 않은 것
+
+- `/bg`로 넘긴 원래 대화형(`parkedJobId`) 숨김: 대화형의 표시가 바뀌므로 뺐다. 같은 줄기가 둘로 보일 수 있다.
+- 프로세스가 내려간 bg 세션(나를 기다리다 60분 뒤 내려간 것 포함) 표시: `claude agents --json` 보조 경로(조사 문서 B-B)가 필요하다.
+- 화면의 "터미널 없음" 표식, attach 명령 복사 버튼, 미니 캐릭터 창 키를 `jobId`로(재기동 때 pid가 바뀌면 캐릭터 위치가 초기화된다).
+
+## 확인한 것
+
+- 재현 테스트 4개(수정 전 실패) → `node --test` 142/142.
+- 실제 `~/.claude`(대화형 24, bg 2): 수정 전·후 코드를 같은 시각으로 수집하면 대화형 책상 24/24 동일(pid 기준), bg 2개가 새로 앉음.
+- 조사: `docs/superpowers/research/2026-11-12-background-agents.md`.

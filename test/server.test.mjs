@@ -116,3 +116,37 @@ test("GET /api/state?pid=N: desks는 그 pid 하나(없으면 빈 배열), 나�
     child.kill();
   }
 });
+
+test("POST /api/focus: 백그라운드 세션은 터미널을 찾지 않고 claude attach 안내(대화형은 실제로 터미널을 움직여서 여기서 부르지 않는다)", async () => {
+  const claudeDir = mkdtempSync(join(tmpdir(), "ao-claude-"));
+  mkdirSync(join(claudeDir, "sessions"));
+  writeFileSync(
+    join(claudeDir, "sessions", `${process.pid}.json`),
+    JSON.stringify({
+      pid: process.pid,
+      sessionId: "sbg",
+      cwd: claudeDir,
+      kind: "bg",
+      jobId: "29c7856c",
+      status: "idle",
+      statusUpdatedAt: Date.now(),
+    }),
+  );
+  const port = 45750 + Math.floor(Math.random() * 100);
+  const { child, ready } = startServer(port, claudeDir);
+  try {
+    await ready;
+    const res = await fetch(`http://127.0.0.1:${port}/api/focus`, {
+      method: "POST",
+      headers: { origin: `http://127.0.0.1:${port}`, "content-type": "application/json" },
+      body: JSON.stringify({ pid: process.pid }),
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      ok: false,
+      reason: "백그라운드 세션이다. 터미널에서 claude attach 29c7856c",
+    });
+  } finally {
+    child.kill();
+  }
+});

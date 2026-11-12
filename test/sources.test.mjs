@@ -300,3 +300,42 @@ test("collectOffice: 링크는 세션 동안 남고(기록 끝 밖으로 밀려�
   session("lnk");
   assert.deepEqual(labels(), []);
 });
+
+test("listTerminals: 백그라운드 세션(kind bg)도 — kind·jobId를 싣는다. daemon 등 그 밖 kind는 계속 제외, 대화형 객체는 그대로", () => {
+  const dir = tmp();
+  mkdirSync(join(dir, "sessions"));
+  writeFileSync(join(dir, "sessions", "a.json"), term());
+  writeFileSync(join(dir, "sessions", "b.json"), term({ sessionId: "sid-bg", kind: "bg", jobId: "29c7856c" }));
+  writeFileSync(join(dir, "sessions", "c.json"), term({ sessionId: "sid-d", kind: "daemon" }));
+  writeFileSync(join(dir, "sessions", "e.json"), term({ sessionId: "sid-x", kind: "bg", jobId: "bad id;rm" }));
+  const base = { pid: process.pid, cwd: "/r", name: "n1", status: "busy", waitingFor: null, statusUpdatedAt: 1000 };
+  assert.deepEqual(
+    listTerminals(dir).sort((a, b) => a.sessionId.localeCompare(b.sessionId)),
+    [
+      { ...base, sessionId: "sid" },
+      { ...base, sessionId: "sid-bg", kind: "bg", jobId: "29c7856c" },
+      { ...base, sessionId: "sid-x", kind: "bg", jobId: null },
+    ],
+  );
+});
+
+test("collectOffice: 백그라운드 세션이 함께 있어도 대화형 책상은 똑같다(새 필드 없음), bg 책상만 kind·jobId", () => {
+  const only = tmp();
+  const both = tmp();
+  for (const d of [only, both]) {
+    mkdirSync(join(d, "sessions"));
+    writeFileSync(join(d, "sessions", "a.json"), term({ status: "idle" }));
+  }
+  writeFileSync(
+    join(both, "sessions", "b.json"),
+    term({ sessionId: "sid-bg", kind: "bg", jobId: "29c7856c", status: "idle" }),
+  );
+  const a = collectOffice(only, 5000).desks;
+  const b = collectOffice(both, 5000).desks;
+  assert.equal(b.length, 2);
+  assert.deepEqual(b.find((d) => d.sessionId === "sid"), a[0]);
+  assert.equal("kind" in a[0], false);
+  const bg = b.find((d) => d.sessionId === "sid-bg");
+  assert.equal(bg.kind, "bg");
+  assert.equal(bg.jobId, "29c7856c");
+});
