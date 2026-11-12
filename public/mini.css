@@ -1,0 +1,803 @@
+/* 미니 모드(하단 띠). 1 art px = 2px. 띠 96px = 말풍선 36 · 아바타 44 · 이름 16. 큰 창 style.css는 싣지 않는다 */
+@font-face {
+  font-family: "PFStardust";
+  src: url(fonts/PFStardust.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "PFStardust";
+  src: url(fonts/PFStardustBold.woff2) format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri11";
+  src: url(fonts/Galmuri11.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri11";
+  src: url(fonts/Galmuri11-Bold.woff2) format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Silkscreen";
+  src: url(fonts/Silkscreen.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --bg: #2f3542;
+  --ink: #2a1d1a;
+  --cream: #fffaf0;
+  --name: #d9dde6;
+  --dim: #8d94a3;
+  --wait1: #f2c14e;
+  --wait2: #f08a4b;
+  --wait3: #e05a5a;
+  --font: "PFStardust", "Galmuri11", "Silkscreen", monospace;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--name);
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 12px;
+  -webkit-font-smoothing: none;
+  overflow: hidden;
+  user-select: none;
+}
+#bar {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 40px;
+  align-items: end;
+}
+#row {
+  display: flex;
+  align-items: end;
+  gap: 0;
+  padding-left: 24px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  height: 100%;
+}
+#row::-webkit-scrollbar {
+  display: none;
+}
+.empty {
+  align-self: center;
+  color: var(--dim);
+  white-space: nowrap;
+}
+#status {
+  color: var(--dim);
+  white-space: nowrap;
+  padding: 0 8px 2px 0;
+  line-height: 16px;
+}
+#open {
+  width: 40px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--name);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+#open:hover,
+#open:focus-visible {
+  color: var(--cream);
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* 한 칸 80px: 말풍선 줄(위) · 아바타 · 이름 */
+.cell {
+  position: relative;
+  flex: 0 0 80px;
+  display: grid;
+  grid-template-rows: 36px 44px 16px;
+  align-items: end;
+  justify-items: center;
+}
+.cell > * {
+  min-width: 0;
+}
+.bubble {
+  grid-row: 1;
+}
+.face {
+  grid-row: 2;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  width: 80px;
+  height: 44px;
+  display: block;
+}
+.face svg {
+  display: block;
+}
+.face:focus-visible {
+  outline: 2px solid var(--cream);
+  outline-offset: -2px;
+}
+/* 이름 줄: 제목은 줄여도 경과 시간은 항상 보인다(flex, .wait는 안 줄어듦) */
+.name {
+  grid-row: 3;
+  width: 76px;
+  display: flex;
+  justify-content: center;
+  white-space: nowrap;
+  line-height: 16px;
+  cursor: pointer;
+}
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wait {
+  flex: 0 0 auto;
+}
+.wait:not(:empty) {
+  margin-left: 4px;
+}
+.name[data-level="1"] {
+  color: var(--wait1);
+}
+.name[data-level="2"] {
+  color: var(--wait2);
+}
+.name[data-level="3"] {
+  color: var(--wait3);
+}
+
+/* 시안 .resp: 크림 바탕, 4px 검정 박스 섀도 테두리, 왼쪽 아래 꼬리 */
+.bubble {
+  position: relative;
+  justify-self: start;
+  margin-left: 24px;
+  margin-bottom: 10px;
+  max-width: 160px;
+  padding: 4px 8px;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  color: var(--ink);
+  background: var(--cream);
+  box-shadow:
+    0 -4px 0 0 var(--ink),
+    0 4px 0 0 var(--ink),
+    -4px 0 0 0 var(--ink),
+    4px 0 0 0 var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  z-index: 1;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  bottom: -4px;
+  width: 4px;
+  height: 4px;
+  background: var(--cream);
+  box-shadow:
+    4px 0 0 var(--cream),
+    0 4px 0 var(--cream),
+    -4px 4px 0 var(--ink),
+    4px 4px 0 var(--ink),
+    -4px 8px 0 var(--ink),
+    0 8px 0 var(--ink);
+}
+.bubble[data-static] {
+  cursor: default;
+}
+.bubble[data-open] {
+  max-width: 420px;
+  overflow-y: auto; /* 최대 높이는 mini.mjs가 화면 높이로 정한다(창 상한 60%보다 길면 안에서 스크롤) */
+  white-space: pre-wrap;
+  overflow-x: hidden;
+  text-overflow: clip;
+  line-height: 16px;
+  z-index: 2;
+}
+.cell[data-open] {
+  grid-template-rows: auto 44px 16px;
+}
+.msg {
+  position: absolute;
+  bottom: 62px;
+  left: 0;
+  max-width: 240px;
+  padding: 2px 6px;
+  background: var(--wait3);
+  color: var(--cream);
+  white-space: nowrap;
+  z-index: 3;
+}
+
+/* 둥둥(시안 bob 1.4s step-end)과 김·반짝임 깜빡임. 병아리는 0.35s 늦게 */
+.bob {
+  animation: bob 1.4s step-end infinite;
+}
+.chick {
+  animation: bob 1.4s step-end 0.35s infinite;
+}
+@keyframes bob {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+}
+.tw {
+  animation: tw 1.2s step-end infinite;
+}
+.tw.b {
+  animation-delay: 0.6s;
+}
+@keyframes tw {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+}
+#bar.still .bob,
+#bar.still .chick,
+#bar.still .tw {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bob,
+  .chick,
+  .tw {
+    animation: none;
+  }
+}
+#bar.offline .cell {
+  opacity: 0.5;
+}
+
+/* ── 펫 모드(/mini?pid=N, ADR 0006): 투명 창 하나에 캐릭터 하나. 띠 요소는 없다 ──
+   모습: 캐릭터만 픽셀, 주변(말풍선·이름표·표지판·쪽지)은 macOS 문법 — 둥근 모서리, 반투명 재질, 가는 테두리 + 부드러운 그림자, 시스템 색.
+   투명 창이라 뒤 화면을 흐리는 진짜 재질(backdrop-filter)은 못 쓰고 거의 불투명한 채움으로 흉내 낸다. 그림자는 창(= .cell) 안에서 끝나야 해 padding을 둔다 */
+html.pet,
+body.pet,
+body.pet #bar {
+  background: transparent; /* html에도 --bg가 칠해져 있어 셋 다 투명해야 창이 비친다 */
+}
+body.pet #bar {
+  grid-template-columns: 1fr;
+  align-items: end;
+}
+body.pet #status,
+body.pet #open {
+  display: none;
+}
+body.pet #row {
+  padding-left: 0;
+  overflow: visible;
+  align-items: end;
+}
+body.pet .cell {
+  --label: #1d1d1f;
+  --label2: rgba(60, 60, 67, 0.62);
+  --sep: rgba(60, 60, 67, 0.16);
+  --light: rgba(251, 251, 253, 0.95); /* 밝은 재질 */
+  --dark: rgba(29, 29, 31, 0.84); /* 어두운 재질 */
+  --red: #ff3b30;
+  --orange: #ff9500;
+  --green: #34c759;
+  --yellow: #ffcc00;
+  --gray: #8e8e93;
+  --lift:
+    0 0 0 0.5px rgba(0, 0, 0, 0.14), 0 1px 2px rgba(0, 0, 0, 0.1),
+    0 4px 10px rgba(0, 0, 0, 0.16);
+  flex: 0 0 auto;
+  position: relative;
+  display: grid;
+  /* 가운데 축: 칸 폭을 116으로 고정하고 말풍선·얼굴·이름표를 그 가운데에 둔다. 폭보다 넓은 것(쪽지·펼친 말풍선·늘어난 이름표)은
+     safe 정렬로 왼쪽에 붙어 오른쪽으로 넘친다 → 무엇이 커져도 캐릭터는 화면에서 제자리. 창 폭은 mini.mjs가 scrollWidth로 잰다 */
+  width: 116px;
+  grid-template-columns: 116px;
+  grid-template-rows: auto auto auto auto 44px auto; /* 문구 · 쪽지 · 말풍선 · 표지판 · 얼굴 · 이름표. 앞 넷은 없으면 0 */
+  justify-items: safe center;
+  align-items: end;
+  padding: 8px 6px 5px; /* 그림자가 창 밖으로 안 잘리게. 접힌 창 폭 116 + 12 = 128 = SLOT */
+  /* 글자는 픽셀 폰트를 쓰지 않는다: 12px 아래로 줄이면 획이 뭉개진다(한글·숫자) */
+  font:
+    400 11px/14px -apple-system,
+    BlinkMacSystemFont,
+    "Apple SD Gothic Neo",
+    sans-serif;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+body.pet .cell > * {
+  min-width: 0;
+}
+/* 얼굴 80×44: 열 폭이 80보다 넓어도 왼쪽에 고정 → 표지판 위치가 안 흔들린다 */
+body.pet .face {
+  grid-row: 5;
+  position: relative;
+  width: 80px;
+  height: 44px;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: grab;
+}
+body.pet .face svg {
+  display: block;
+  position: relative; /* 받침 위에 */
+}
+/* 받침: 머리 뒤의 옅은 흰 빛(머리 중심 40,16 · 64×46). 어두운·복잡한 배경에서 잉크 윤곽이 묻히지 않게.
+   blur 필터 대신 그라데이션이라 얼굴 칸 밖으로 번지지 않는다 */
+body.pet .face::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: -7px;
+  width: 64px;
+  height: 46px;
+  background: radial-gradient(
+    closest-side,
+    rgba(255, 255, 255, 0.85) 30%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  opacity: 0.65;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  pointer-events: none;
+}
+/* 올려두면 받침이 밝아지며 커진다(이 캐릭터를 가리키고 있다는 표시) */
+body.pet .cell:hover .face::before,
+body.pet .cell.menu .face::before,
+body.pet .cell.dragging .face::before {
+  opacity: 1;
+  transform: scale(1.22);
+}
+/* 이름표: 어두운 재질 판 + 밝은 머리카락 테두리(어두운 바탕에서도 윤곽이 남는다). 첫 줄 점 · 제목 · 경과, 둘째 줄 위치 */
+body.pet .name {
+  grid-row: 6;
+  width: auto; /* 띠 모드의 width 76 되돌림 */
+  min-width: 80px;
+  max-width: 116px;
+  margin-top: 2px;
+  padding: 3px 9px 4px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  column-gap: 5px;
+  align-items: center;
+  white-space: nowrap;
+  cursor: grab;
+  border-radius: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  background: var(--dark);
+  color: #fff;
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.28),
+    0 1px 3px rgba(0, 0, 0, 0.28);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+body.pet .name .dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gray);
+}
+body.pet .name .title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 위치: 이 세션이 어느 구역(· worktree)에서 도는지. 올리지 않아도 보인다 */
+body.pet .name .where {
+  grid-column: 2 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 12px;
+  opacity: 0.62;
+}
+/* 경과 시간: 이 상태로 얼마나. 제목보다 한 단계 흐리게, 숫자 폭 고정 */
+body.pet .name .wait {
+  margin-left: 0;
+  opacity: 0.6;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+body.pet .cell[data-state="waiting"] .dot {
+  background: var(--orange);
+}
+body.pet .cell[data-state="work"] .dot { /* avatarState 값: alert→waiting · work · done · idle */
+  background: var(--green);
+}
+body.pet .cell[data-state="done"] .dot {
+  background: var(--yellow);
+}
+/* 기다림 5분부터 이름표 전체가 빨강 */
+body.pet .cell[data-level="2"] .name,
+body.pet .cell[data-level="3"] .name {
+  background: var(--red);
+}
+body.pet .cell[data-level="2"] .dot,
+body.pet .cell[data-level="3"] .dot {
+  background: #fff;
+}
+/* 표지판: 기다릴 때만, 머리 위 오른쪽(손 든 쪽). 빨간 배지 "! 승인" */
+body.pet .sign {
+  grid-row: 4;
+  margin: 0 0 3px 36px; /* 가운데에서 오른쪽으로 18 */
+  height: 16px;
+  padding: 0 7px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  font-weight: 600;
+  line-height: 16px;
+  background: var(--red);
+  color: #fff;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+body.pet .sign b {
+  font-weight: 700;
+  margin-right: 3px;
+}
+/* 15분부터 표지판이 숨 쉬듯 옅어졌다 돌아온다. 움직임 줄이기면 대신 "!!" */
+body.pet .cell[data-level="3"] .sign {
+  animation: breathe 1.6s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  body.pet .cell[data-level="3"] .sign {
+    animation: none;
+  }
+  body.pet .cell[data-level="3"] .sign b::after {
+    content: "!";
+  }
+}
+/* 말풍선: 밝은 재질 둥근 판. 늘 떠 있고 그 세션의 최근 응답을 말한다. 기다림이면 빨간 테.
+   접힌 모습은 칸(128px) 안에서 두 줄 — 옆 캐릭터를 덮지 않는다. 전문은 눌러서 */
+body.pet .bubble {
+  grid-row: 3;
+  justify-self: safe center; /* 띠 모드의 start 되돌림 */
+  position: relative;
+  margin: 0 0 6px;
+  max-width: 108px;
+  padding: 5px 9px 0;
+  border: 0;
+  border-bottom: 5px solid transparent; /* 아래 여백을 테두리로: 줄 수 자르기는 padding 안까지 다음 줄을 그린다 */
+  border-radius: 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--label);
+  background: var(--light);
+  cursor: pointer;
+  box-shadow: var(--lift);
+  overflow: hidden;
+  white-space: normal; /* 띠 모드의 nowrap 되돌림 */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  word-break: keep-all; /* 한글은 어절 단위로, 긴 영문·주소만 중간에서 */
+  overflow-wrap: anywhere;
+}
+body.pet .bubble[hidden] {
+  display: none;
+}
+body.pet .bubble::after {
+  content: none; /* 띠 모드의 픽셀 꼬리 없음 */
+}
+body.pet .cell[data-state="waiting"] .bubble {
+  box-shadow:
+    0 0 0 1.5px var(--red),
+    var(--lift);
+}
+body.pet .bubble[data-static] {
+  cursor: default;
+}
+/* 펼침: 최대 420, 줄바꿈, 머리줄 "전문 · 누르면 접힘". 세로는 글 길이대로(상한은 mini.mjs가 화면 60%로) */
+body.pet .bubble[data-open] {
+  display: block;
+  -webkit-line-clamp: none;
+  width: max-content; /* 칸 폭(116)에 갇히지 않게: 글 길이대로, 최대 420 */
+  max-width: 420px;
+  padding: 9px 12px 0;
+  border-bottom-width: 9px;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  overflow-x: hidden;
+  overflow-y: auto;
+  text-overflow: clip;
+  line-height: 16px;
+}
+body.pet .bubble[data-open]::before {
+  content: "전문 · 누르면 접힘";
+  display: block;
+  color: var(--label2);
+  font-size: 10px;
+  font-weight: 600;
+  margin: 0 0 7px;
+  padding-bottom: 6px;
+  box-shadow: 0 0.5px 0 var(--sep);
+}
+/* 포커스 실패 문구: 빨간 판, 맨 위 */
+body.pet .msg {
+  grid-row: 1;
+  position: static; /* 띠 모드의 absolute 되돌림 */
+  white-space: normal;
+  justify-self: start;
+  margin: 0 0 6px;
+  max-width: 240px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  font-weight: 500;
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+/* 쪽지: 잠깐 올려두면 맨 위에. 라벨(흐림) + 값 두 열. 값은 두 줄까지 */
+body.pet .peek {
+  grid-row: 2;
+  justify-self: start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  width: 232px;
+  box-sizing: border-box;
+  margin: 0 0 6px;
+  padding: 8px 11px;
+  border-radius: 12px;
+  color: var(--label);
+  background: var(--light);
+  box-shadow: var(--lift);
+}
+body.pet .peek[hidden] {
+  display: none;
+}
+body.pet .peek dt {
+  color: var(--label2);
+  font-weight: 500;
+}
+body.pet .peek dd {
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  word-break: keep-all; /* 한글은 어절 단위로, 긴 영문·주소만 중간에서 */
+  overflow-wrap: anywhere;
+}
+
+/* ── 상호작용 피드백 ── */
+/* 호버: 이름표가 밝은 재질로 바뀌고 긴 제목은 240px까지 펼침(창이 오른쪽으로 자란다) */
+body.pet .cell:hover .name,
+body.pet .cell.menu .name,
+body.pet .cell.dragging .name {
+  background: var(--light);
+  color: var(--label);
+  box-shadow: var(--lift);
+}
+body.pet .cell[data-level="2"]:hover .dot,
+body.pet .cell[data-level="3"]:hover .dot,
+body.pet .cell[data-level="2"].menu .dot,
+body.pet .cell[data-level="3"].menu .dot,
+body.pet .cell[data-level="2"].dragging .dot,
+body.pet .cell[data-level="3"].dragging .dot {
+  background: var(--red); /* 흰 점은 밝은 재질 위에서 안 보인다 */
+}
+body.pet .cell:hover .name,
+body.pet .cell.menu .name {
+  width: max-content; /* 칸 폭(116)을 넘어 오른쪽으로 */
+  max-width: 240px;
+}
+/* 끌기: 캐릭터가 2 art px 들리고 둥둥이 멈추고 그림자가 옅어진다(손에 붙은 느낌) */
+body.pet .cell.dragging .face,
+body.pet .cell.dragging .name {
+  cursor: grabbing;
+}
+body.pet .cell.dragging .bob,
+body.pet .cell.dragging .chick {
+  animation: none;
+  transform: translateY(-4px);
+}
+body.pet .cell.dragging .shadow {
+  opacity: 0.4;
+}
+/* 더블클릭: 한 번 폴짝(2프레임) */
+body.pet .cell.hop .bob {
+  animation: hop 0.3s step-end 1;
+}
+@keyframes hop {
+  0% {
+    transform: translateY(-4px);
+  }
+  50% {
+    transform: translateY(0);
+  }
+}
+/* 등장: 3프레임 낙하 */
+body.pet .cell.enter {
+  animation: drop 0.36s step-end 1;
+}
+@keyframes drop {
+  0% {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+  34% {
+    transform: translateY(-6px);
+    opacity: 1;
+  }
+  67% {
+    transform: translateY(-2px);
+  }
+  100% {
+    transform: none;
+  }
+}
+/* 끊김: 반투명 + 무채색 + 정지. 이름표·표지판은 그대로(마지막 모습) */
+body.pet .cell.offline {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+body.pet .cell.offline .bob,
+body.pet .cell.offline .chick,
+body.pet .cell.offline .tw,
+body.pet .cell.offline .sign {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  body.pet .bob,
+  body.pet .chick,
+  body.pet .tw,
+  body.pet .cell.enter,
+  body.pet .cell.hop .bob {
+    animation: none;
+  }
+}
+
+/* ── 본부(허브) 창(/mini?hub=1): 벤토 타일 하나(판 96×60). 타워 52px(26px 맵 ×2) = 큰 사무실, 오른쪽 32×24 아이콘 둘 = 정렬 · 새 터미널.
+   커서: 버튼 위 pointer, 판의 빈 바탕(패딩·간격)만 grab, 끄는 동안(.dragging) 전부 grabbing ── */
+html.hub,
+body.hub,
+body.hub #bar {
+  background: transparent;
+}
+body.hub #bar {
+  grid-template-columns: 1fr;
+  align-items: end;
+}
+body.hub #status,
+body.hub #open {
+  display: none;
+}
+body.hub #row {
+  padding-left: 0;
+  overflow: visible;
+  align-items: end;
+}
+body.hub .hub {
+  --label: #1d1d1f;
+  --light: rgba(251, 251, 253, 0.95);
+  --tile: rgba(60, 60, 67, 0.08);
+  --lift:
+    0 0 0 0.5px rgba(0, 0, 0, 0.14), 0 1px 2px rgba(0, 0, 0, 0.1),
+    0 4px 10px rgba(0, 0, 0, 0.16);
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  margin: 6px; /* 그림자가 창 밖으로 안 잘리게 */
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--light);
+  box-shadow: var(--lift);
+  color: var(--label);
+  cursor: grab;
+  user-select: none;
+  width: max-content;
+}
+body.hub .side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+body.hub .tile {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--tile);
+  color: var(--label);
+  cursor: pointer;
+  line-height: 0;
+}
+body.hub .tile.tower {
+  width: 52px;
+  height: 52px;
+  background: transparent;
+}
+body.hub .tile.tower svg {
+  border-radius: 8px;
+}
+body.hub .tile.icon {
+  width: 32px;
+  height: 24px;
+  color: rgba(60, 60, 67, 0.78);
+}
+/* 숨김 토글: 세로 타일(타워 높이). 눌린 상태(aria-pressed) = 캐릭터를 숨긴 중 — 짙은 바탕 + 흰 아이콘 */
+body.hub .tile.tall {
+  height: 52px;
+  align-content: center;
+  gap: 5px;
+}
+body.hub .tile.tall .eye {
+  line-height: 0;
+}
+body.hub .tile.tall[aria-pressed="true"] {
+  background: rgba(29, 29, 31, 0.84);
+  color: #fff;
+}
+body.hub .tile.tall .badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  background: #ff3b30;
+  color: #fff;
+  font:
+    600 10px/16px -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+body.hub .tile:hover {
+  background: rgba(60, 60, 67, 0.16);
+}
+body.hub .tile.tall[aria-pressed="true"]:hover {
+  background: rgba(29, 29, 31, 0.72);
+}
+body.hub .tile.tower:hover {
+  background: rgba(60, 60, 67, 0.08);
+}
+body.hub .tile:active,
+body.hub .tile:disabled {
+  background: rgba(60, 60, 67, 0.24);
+}
+body.hub .hub.dragging,
+body.hub .hub.dragging .tile {
+  cursor: grabbing;
+}

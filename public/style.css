@@ -1,0 +1,1353 @@
+/* Agent Office v2 화면(시안 F). wireframes/office-v2.html?concept=F의 CSS에서 F가 쓰는 공통 규칙과 F 규칙을 옮겼다.
+   F 규칙의 시안 접두사는 뗐다. 둥근 모서리는 없다(아래 * 규칙) */
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2;
+  --paper: #ffffff;
+  --ink: #222222;
+  --muted: #767676;
+  --line: #d6d6d1;
+  --fill: #ededea;
+  --sel: #e6e6e1;
+  --slab: #9b9b94;
+  /* 와이어프레임이라 색은 '나를 기다림' 하나에만 쓴다 */
+  --hot: #c2410c;
+  --hot-bg: #fff1e6;
+}
+* {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+h1,
+h2,
+h3,
+p,
+blockquote {
+  margin: 0;
+}
+body {
+  margin: 0;
+  height: 100dvh;
+  display: grid;
+  grid-template:
+    "office side" minmax(0, 1fr)
+    "detail side" minmax(200px, 36vh)
+    / minmax(0, 1fr) 380px;
+  background: var(--bg);
+  color: var(--ink);
+  font:
+    13px/1.45 system-ui,
+    -apple-system,
+    "Apple SD Gothic Neo",
+    "Segoe UI",
+    sans-serif;
+}
+body.fold {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+button {
+  appearance: none;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+:focus-visible {
+  outline: 2px solid var(--hot);
+  outline-offset: 2px;
+}
+/* 튜토리얼을 끝내면 포커스를 #office에 두는데(tour.mjs end), 건물 전체에 테두리가 그려지면 안 된다 */
+#office:focus-visible {
+  outline: none;
+}
+.muted,
+.empty {
+  color: var(--muted);
+}
+.pad {
+  padding: 12px 16px;
+}
+.who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.who b,
+.who span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.who span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.lk {
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 11px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lk:hover {
+  border-color: var(--ink);
+}
+#office {
+  grid-area: office;
+  overflow: auto;
+  padding: 14px 24px 32px;
+}
+.banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.banner h1 {
+  font-size: 16px;
+}
+.bld {
+  width: max-content;
+  min-width: 100%;
+}
+.floors {
+  border: 3px solid var(--slab);
+  border-top: 0;
+  border-bottom: 14px solid var(--slab); /* 땅 */
+  background: var(--paper);
+}
+#basement {
+  border: 3px solid var(--slab);
+  border-top: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--fill) 0 6px,
+    var(--bg) 6px 12px
+  );
+}
+.bhead {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: none;
+  font-weight: 700;
+}
+.bhead .bwait {
+  color: var(--hot);
+}
+.brows {
+  display: grid;
+  gap: 4px;
+  padding: 0 12px 12px;
+}
+.brow {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 16em) 9em minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+}
+/* 배경은 .brow(F)의 var(--paper)를 그대로 쓴다. 와이어프레임에서도 F 규칙이 더 강해 이 배경은 보이지 않았다 */
+.brow.sel {
+  box-shadow: inset 4px 0 0 var(--ink);
+}
+.bage {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.bage.hot {
+  color: var(--hot);
+  font-weight: 700;
+}
+.blast {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fig {
+  display: inline-block;
+  flex: none;
+  line-height: 0;
+}
+.fig svg {
+  display: block;
+  overflow: visible;
+}
+/* ── F 픽셀 오피스: 사용자 Design 캔버스(Pixel Office Tower)의 도트 엔진. 건물은 canvas, 글자는 DOM ──
+   층 = 폴더, 방 = 팀(자리 고정), 칠판 = 상태판. 우측·하단은 건물 팔레트의 어두운 패널. 둥근 모서리 없음 */
+/* F 글꼴: public/fonts/에 자체 호스팅(외부 요청 없음).
+   Silkscreen = 간판·라벨·제목(DESIGN.md §4). 칠판과 집계 카드의 상태 글자 = PF스타더스트(한글 도트).
+   PF스타더스트는 재배포 금지라 git에 없다(로컬 파일, 받는 법은 스펙 §12). 파일이 없으면 Galmuri(OFL)로 그린다 */
+@font-face {
+  font-family: "PFStardust";
+  src: url(fonts/PFStardust.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "PFStardust";
+  src: url(fonts/PFStardustBold.woff2) format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "PFStardust";
+  src: url(fonts/PFStardustExtraBold.woff2) format("woff2");
+  font-weight: 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Silkscreen";
+  src: url(fonts/Silkscreen.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Silkscreen";
+  src: url(fonts/Silkscreen-Bold.woff2) format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri11";
+  src: url(fonts/Galmuri11.woff2) format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri11";
+  src: url(fonts/Galmuri11-Bold.woff2) format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri9";
+  src: url(fonts/Galmuri9.woff2) format("woff2");
+  font-display: swap;
+}
+/* 낮 패널 = 시안 C의 흙·슬래브 톤 */
+body {
+  --bg: #2e2826;
+  --paper: #3a302b;
+  --ink: #f3ead8;
+  --muted: #c2b29c;
+  --line: #5a4a40;
+  --fill: #463a33;
+  --sel: #5a4a40;
+  --hot: #ff9a4d;
+  --hot-bg: #4a2a20;
+  /* 도트 글꼴과 크기. 크기는 대체 글꼴 Galmuri의 원래 크기(12·10px). PF스타더스트의 원래 크기는 아직 확인하지 못했다 */
+  --font-ui: "PFStardust", "Galmuri11", "Silkscreen", monospace;
+  --font-ui-sm: "PFStardust", "Galmuri9", "Galmuri11", monospace;
+  --fs-ui: 12px;
+  --fs-ui-sm: 10px;
+  /* 오리 말풍선. 칠판(10px)보다 작게. 원본의 Galmuri11 12px는 S=2에서 오리 간격을 넘어 잘린다 */
+  --fs-bub: 9px;
+  --pixel: "Silkscreen", "Spoqa Han Sans Neo", "Apple SD Gothic Neo", monospace;
+  font-family:
+    "Spoqa Han Sans Neo", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+}
+body[data-palette="night"] {
+  --bg: #0b0d1e;
+  --paper: #161a30;
+  --ink: #e6ecff;
+  --muted: #9aa6c8;
+  --line: #323a4c;
+  --fill: #1d2449;
+  --sel: #28325c;
+  --hot: #ffa05a;
+  --hot-bg: #3a2a2a;
+}
+* {
+  border-radius: 0 !important;
+}
+:is(.banner h1, .sh h2, .dhead h2, .bhead, .count b) {
+  font-family: var(--pixel);
+}
+.banner h1 {
+  font-size: 20px;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0 #2a1d1a;
+}
+/* 낮·밤 스위치(T30): 하늘 길(낮 = 하늘색 + 구름, 밤 = 남색 + 별) 위를 해·부엉이 손잡이(16px, 1칸 = 2px)가
+   3단 도트 걸음으로 오간다. 하늘 색은 건물 하늘과 같다. 상태는 aria-checked(밤 = true), N 키 안내는 title */
+#night-btn {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid #2a1d1a;
+  /* 모서리 1칸(2px)을 깎아 도트 테두리처럼 */
+  clip-path: polygon(
+    2px 0,
+    calc(100% - 2px) 0,
+    100% 2px,
+    100% calc(100% - 2px),
+    calc(100% - 2px) 100%,
+    2px 100%,
+    0 calc(100% - 2px),
+    0 2px
+  );
+  background:
+    linear-gradient(#fff 0 0) 26px 9px / 10px 4px no-repeat,
+    linear-gradient(#fff 0 0) 28px 7px / 6px 2px no-repeat,
+    #8acbe6;
+}
+/* 밤 테두리는 갈색이 남색 바탕에 묻혀 탁해 보여서 밤 외벽색 계열(달빛 받은 강철)로 바꾼다 */
+body[data-palette="night"] #night-btn {
+  border-color: #56648a;
+  background:
+    linear-gradient(#fff6d8 0 0) 8px 4px / 2px 2px no-repeat,
+    linear-gradient(#fff6d8 0 0) 15px 13px / 2px 2px no-repeat,
+    linear-gradient(#f2c14e 0 0) 4px 12px / 2px 2px no-repeat,
+    #161a30;
+}
+#night-btn .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  line-height: 0;
+  transition: left 0.2s steps(3);
+}
+body[data-palette="night"] #night-btn .knob {
+  left: 24px;
+}
+#night-btn .owl,
+body[data-palette="night"] #night-btn .sun {
+  display: none;
+}
+body[data-palette="night"] #night-btn .owl {
+  display: block;
+}
+#night-btn:hover {
+  filter: brightness(1.12);
+}
+/* clip-path가 바깥 포커스 테두리를 잘라내므로 안쪽에 그린다 */
+#night-btn:focus-visible {
+  outline-offset: -4px;
+}
+/* 미니 모드 버튼(ADR 0005): 데스크탑 앱에서만 보인다. 창 우측 하단에 떠 있다. 칠판처럼 크림 바탕에 도트 테두리.
+   글꼴은 칠판 계열(--font-ui). ⌘는 PF스타더스트에 없어 Galmuri11이 그린다. 굵기는 400:
+   Galmuri11 Bold에는 ⇧⌘가 없어 굵게 하면 도트가 아닌 시스템 글꼴로 빠진다. Silkscreen(--pixel)에도 둘 다 없다 */
+#mini-btn {
+  position: fixed;
+  right: 16px;
+  bottom: 12px;
+  z-index: 5; /* 연결 메시지(10)·튜토리얼(100) 아래 */
+  height: 28px;
+  padding: 0 10px;
+  border: 2px solid #2a1d1a;
+  background: #fffaf0;
+  box-shadow: 3px 3px 0 rgb(0 0 0 / 0.4);
+  color: #2a1d1a;
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* 버튼 자리(위 12 + 높이 28 + 아래 12)를 우측 패널 아래에 비워 로그 끝줄이 버튼 밑에 깔리지 않게 한다 */
+body:has(#mini-btn:not([hidden])) #side {
+  padding-bottom: 52px;
+}
+/* 좁은 화면(아래 900px 규칙)은 한 줄로 쌓여 문서가 스크롤된다. 자리를 우측 패널 대신 문서 끝에 비운다 */
+@media (max-width: 900px) {
+  body:has(#mini-btn:not([hidden])) {
+    padding-bottom: 52px;
+  }
+  body:has(#mini-btn:not([hidden])) #side {
+    padding-bottom: 0;
+  }
+}
+body[data-palette="night"] #mini-btn {
+  border-color: #56648a;
+  background: #d9dde6;
+}
+#mini-btn:hover {
+  filter: brightness(1.08);
+}
+@media (prefers-reduced-motion: reduce) {
+  #night-btn .knob {
+    transition: none;
+  }
+}
+.bld {
+  min-width: 0;
+  margin-inline: auto;
+}
+/* 지하층은 건물 폭을 정하지 않는다. 펼친 줄의 긴 요청 글이 .bld(max-content)를 넓혀
+   건물이 왼쪽으로 밀리고 가로 스크롤이 생기던 것을 막는다. 줄은 건물 폭 안에서 말줄임한다 */
+#basement {
+  contain: inline-size;
+}
+/* 일하는 팀이 없으면 폭을 정할 건물 그림이 없으니 화면 폭을 다 쓴다 */
+.bld:not(:has(.tw)) {
+  width: auto;
+}
+.floors {
+  border: 0;
+  background: none;
+}
+/* 지하층 = 땅 아래 암반 */
+#basement {
+  border: 0;
+  background: #7a4e34;
+}
+body[data-palette="night"] #basement {
+  background: #1a1a26;
+}
+/* 펼친 목록 = 흙 속. 자갈·흙 알갱이(반투명이라 #basement 색 위에서 낮·밤 공용), 깊을수록 어둡게.
+   CSP(default-src 'self')가 data: 이미지를 막아 SVG 대신 conic-gradient로 네모 도트를 찍는다.
+   한 겹 = 60×42 타일마다 왼쪽 위 (at 폭 높이) 사각형 하나. 도트 1칸 = 3px(건물 배율 S≈3) */
+.brows {
+  --pb: rgb(0 0 0 / 0.3);
+  --sp: rgb(255 255 255 / 0.16);
+  gap: 6px;
+  padding-top: 6px;
+  background:
+    linear-gradient(transparent, rgb(0 0 0 / 0.35)),
+    conic-gradient(at 9px 6px, #0000 75%, var(--pb) 0) 3px 6px / 60px 42px,
+    conic-gradient(at 12px 6px, #0000 75%, var(--pb) 0) 36px 24px / 60px 42px,
+    conic-gradient(at 6px 3px, #0000 75%, var(--pb) 0) 45px 3px / 60px 42px,
+    conic-gradient(at 6px 3px, #0000 75%, var(--pb) 0) 18px 33px / 60px 42px,
+    conic-gradient(at 3px 3px, #0000 75%, var(--sp) 0) 24px 12px / 60px 42px,
+    conic-gradient(at 3px 3px, #0000 75%, var(--sp) 0) 9px 27px / 60px 42px,
+    conic-gradient(at 3px 3px, #0000 75%, var(--sp) 0) 51px 36px / 60px 42px;
+}
+.brow {
+  border: 2px solid #2a1d1a;
+  /* 흙이 비치게. 65%면 밝은 글자 대비는 유지된다 */
+  background: color-mix(in srgb, var(--paper) 65%, transparent);
+}
+/* 하단 상세(F): 높이를 260px로 고정한다. 1920×1080에서 건물 배율 S=3(건물 영역 762px 이상)을 남기고,
+   내용에 따라 높이가 바뀌어 팀을 고를 때마다 배율이 튀지 않게 한다. 넘치는 열은 칸 안에서 스크롤 */
+body {
+  grid-template-rows: minmax(0, 1fr) 260px;
+}
+body.fold {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.tw {
+  position: relative;
+}
+.tw canvas {
+  display: block;
+}
+.tw > :not(canvas) {
+  position: absolute;
+}
+.tw :is(.tw-tag, .tw-sign, .tw-more) {
+  font-family: "Silkscreen", monospace;
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* 층 라벨은 슬래브 위에. T37: 글꼴 1도트 = 1 art px(S × 8px). 줄 높이 8 art px이면 대문자 5칸이
+   9칸 슬래브(tower.mjs F_SLAB)의 2~6째 줄에 온다. 첫 방의 선택 ▼(방 가운데) 앞에서 자른다 */
+.tw-tag {
+  max-width: calc(var(--s) * 100px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f3ead8;
+  font-size: calc(var(--s) * 8px);
+  line-height: calc(var(--s) * 8px);
+  text-transform: uppercase;
+}
+[data-palette="night"] .tw-tag {
+  color: #e6ecff;
+}
+.tw-sign {
+  display: grid;
+  place-items: center;
+  color: #fff6c8;
+  font-size: calc(var(--s) * 9px);
+  font-weight: 700;
+  letter-spacing: calc(var(--s) * 1px);
+}
+[data-palette="night"] .tw-sign {
+  color: #ffb3cf;
+  text-shadow:
+    0 0 6px #ff6fa5,
+    0 0 14px rgb(255 111 165 / 0.7);
+}
+.tw-more {
+  color: #f7e9d0;
+  font-size: calc(var(--s) * 2.5px + 2px);
+  text-shadow: 1px 1px 0 #2a1d1a;
+}
+/* 오리 말풍선: 원본 NightShift.dc.html의 .bub(4 css px = 1 art px) 테두리·꼬리·여백을 art px(--o)로 옮겼다. 글꼴은 칠판과 같은 계열.
+   좌표 = 말풍선 왼쪽 아래. 왼쪽 끝이 오리 머리보다 3 art px 왼쪽에서 시작해 오른쪽으로 뻗는다.
+   외곽선 1 art px는 4방향 box-shadow라 모서리가 비고, 꼬리는 왼쪽 3 art px 지점에서 아래 왼쪽으로 꺾인다.
+   폭은 외곽선까지 오리 간격(tower.mjs F_DP = 34) - 2 = 32 art px까지만 쓰고, 넘치면 말줄임해 옆 말풍선과 겹치지 않는다.
+   셋째 오리 말풍선도 이 폭이면 방 오른쪽 벽(x+220) 안에서 끝난다 */
+.tw-bub {
+  --o: calc(var(--s) * 1px);
+  transform: translateY(-100%);
+  max-width: calc(var(--o) * 30);
+  padding: var(--o) calc(var(--o) * 2);
+  background: #fffaf0;
+  color: #2a1d1a;
+  font-family: var(--font-ui-sm);
+  font-size: var(--fs-bub);
+  font-weight: 700;
+  line-height: calc(var(--fs-bub) + 1px);
+  box-shadow:
+    0 calc(var(--o) * -1) 0 #2a1d1a,
+    0 var(--o) 0 #2a1d1a,
+    calc(var(--o) * -1) 0 0 #2a1d1a,
+    var(--o) 0 0 #2a1d1a;
+  pointer-events: none;
+}
+.tw-bub > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tw-bub::after {
+  content: "";
+  position: absolute;
+  left: calc(var(--o) * 3);
+  bottom: calc(var(--o) * -1);
+  width: var(--o);
+  height: var(--o);
+  background: #fffaf0;
+  box-shadow:
+    var(--o) 0 0 #fffaf0,
+    0 var(--o) 0 #fffaf0,
+    calc(var(--o) * -1) var(--o) 0 #2a1d1a,
+    var(--o) var(--o) 0 #2a1d1a,
+    calc(var(--o) * -1) calc(var(--o) * 2) 0 #2a1d1a,
+    0 calc(var(--o) * 2) 0 #2a1d1a;
+}
+.tw-room {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+/* 선택 = 방 위 슬래브 가운데의 노란 ▼(C안). 테두리는 '나를 기다림'의 빨강만 쓴다.
+   hover는 옅은 ▼, 키보드 포커스는 흰 점선 */
+.tw-room {
+  overflow: visible;
+}
+.tw-room::before {
+  --c: transparent;
+  --u: calc(var(--s) * 1px); /* 1 art px */
+  content: "";
+  position: absolute;
+  top: calc(var(--u) * -4);
+  left: calc(50% - var(--u) * 4);
+  width: calc(var(--u) * 8);
+  height: calc(var(--u) * 4);
+  /* 픽셀 계단 삼각형: 폭 8·6·4·2 art px 막대 네 줄(대각선이 번지지 않게) */
+  background:
+    linear-gradient(var(--c) 0 0) 50% 0 / calc(var(--u) * 8) var(--u),
+    linear-gradient(var(--c) 0 0) 50% var(--u) / calc(var(--u) * 6) var(--u),
+    linear-gradient(var(--c) 0 0) 50% calc(var(--u) * 2) / calc(var(--u) * 4)
+      var(--u),
+    linear-gradient(var(--c) 0 0) 50% calc(var(--u) * 3) / calc(var(--u) * 2)
+      var(--u);
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.tw-room:hover::before {
+  --c: rgb(242 193 78 / 0.5);
+}
+.tw-room[aria-pressed="true"]::before {
+  --c: #f2c14e;
+}
+/* 키보드 포커스, 그리고 펼친 집계 칸과 같은 상태의 방·지하층 머리(T49) */
+.tw-room:focus-visible,
+.tw-room.picked,
+.bhead.picked {
+  outline: 2px dashed #fff;
+  outline-offset: -2px;
+}
+/* 칠판 글자 = 도트 글꼴, 10px. 첫 줄(팀 이름)은 ExtraBold, 나머지 줄은 Bold로 한 단계 낮춘다.
+   줄 간격은 칠판 높이(18 art px)를 3줄로 나눈 6 art px다. 배율이 0.5 단위라 늘 정수 px다(S=2.5면 15px) */
+.tw-board {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 4px;
+  color: #2a1d1a;
+  font-family: var(--font-ui-sm);
+  font-size: var(--fs-ui-sm);
+  font-weight: 700;
+  line-height: calc(var(--s) * 6px);
+  pointer-events: none;
+}
+/* 칠판 = 화면 밖(그 세션의 터미널)으로 가는 버튼(ADR 0003). 방 선택(칠판 밖)과 다르다는 걸
+   hover·키보드 포커스에서 파란 테두리(링크 색)와 오른쪽 위 "터미널 ↗"로 알린다 */
+button.tw-board {
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  pointer-events: auto;
+}
+button.tw-board:is(:hover, :focus-visible) {
+  outline: calc(var(--s) * 1px) solid #3e7bd6;
+  outline-offset: calc(var(--s) * 1px);
+}
+button.tw-board:is(:hover, :focus-visible)::after {
+  content: "터미널 ↗";
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 1px 4px;
+  background: #3e7bd6;
+  color: #fff;
+  font-family: var(--font-ui-sm);
+  font-size: 9px;
+  line-height: 1.2;
+}
+.tw-board b {
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui-sm); /* 12px에서 2px 줄임 */
+  font-weight: 800;
+}
+.tw-board > * {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tw-board :is(.st, .q) {
+  color: #5a4a44;
+}
+/* 셋째 줄 = 내가 보낸 요청. 앞의 여는 따옴표로 팀장 쪽 정보(위 두 줄)와 구분한다 */
+.tw-board .q:not(:empty)::before {
+  content: "“";
+  margin-right: 2px;
+  color: #c2410c;
+}
+.tw-board.waiting .st {
+  color: #c2410c;
+  font-weight: 700;
+}
+/* 팀장 말풍선(오리 말풍선과 같은 모양). 상자(.tw-lead)가 말풍선 왼쪽 아래에 붙어 위로 자란다 */
+.tw-lead {
+  transform: translateY(-100%);
+  pointer-events: none;
+}
+/* 오리 말풍선은 .tw의 직계 자식이라 absolute(=block)지만, 이 말풍선은 한 단계 안쪽이라 block을 직접 준다.
+   span(inline)으로 두면 배경 상자와 말줄임이 깨진다 */
+/* 폭(접힘·펼침 같음, T44): 팀장 x(tower.mjs F_OX = 85)부터 120 art px(외곽선까지 x+206)로,
+   방 오른쪽 벽(x+220)과 14 art px 띄운다. F_OX를 바꾸면 같이 바꾼다 */
+.tw-lead .tw-bub {
+  display: block;
+  position: relative;
+  transform: none;
+  max-width: calc(var(--o) * 120);
+}
+/* 펼침(방을 누름): 2줄, 오리 말풍선 위로 덮는다. 위 끝이 좌표(천장 아래)라 아래로 자란다 */
+.tw-lead.open {
+  transform: none;
+}
+/* 칠판 아래 링크 오브젝트(6×6 art px): 도트 스프라이트가 상자를 꽉 채운다. 누르면 새 탭 */
+.tw-obj {
+  display: block;
+  line-height: 0;
+}
+.tw-obj svg {
+  width: 100%;
+  height: 100%;
+}
+/* PR·Jira 번호 칩: 도트 심볼(1칸 = 2px, gridSvg 크기 그대로) + 칠판 작은 글씨. 배율과 무관한 px 크기다.
+   tower.mjs linkW가 같은 값(좌우 여백 3, 간격 3, 굵기 700, --fs-ui-sm/--font-ui-sm)으로 폭을 잰다. 좌표 = 왼쪽, 세로 가운데 */
+.tw-obj.tw-chip {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 1px 3px;
+  transform: translateY(-50%);
+  font-family: var(--font-ui-sm);
+  font-size: var(--fs-ui-sm);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.tw-obj.tw-chip svg {
+  width: auto;
+  height: auto;
+}
+.tw-obj.tw-chip.PR {
+  background: #2a2433;
+  color: #f6f1e3;
+}
+.tw-obj.tw-chip.Jira {
+  background: #f4f1ea;
+  color: #2a1d1a;
+}
+/* artifact 키캡은 판·글자 없이 그림만(폭 = 12px) */
+.tw-obj.tw-chip.artifact {
+  padding: 0;
+}
+a.tw-obj:hover {
+  filter: brightness(1.2);
+}
+.tw-obj:focus-visible {
+  outline: 2px dashed #fff;
+  outline-offset: 1px;
+}
+/* "+N": 오리 "+N"과 같은 글자. 누르면 아래 방이 선택되고 하단 상세에서 전부 본다 */
+.tw-objmore {
+  display: grid;
+  place-items: center;
+  color: #f7e9d0;
+  font-family: "Silkscreen", monospace;
+  font-size: calc(var(--s) * 2.5px + 2px);
+  line-height: 1;
+  text-shadow: 1px 1px 0 #2a1d1a;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── 우측 요약·로그·하단 상세(스펙 §3.2·§3.3). 공통 규칙 다음에 F 규칙을 둔다 ── */
+/* 우측 고정: 전체 요약 (상태별 집계 + 로그) */
+#side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--line);
+  background: var(--paper);
+}
+.sh {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px 8px;
+}
+.sh h2 {
+  font-size: 13px;
+}
+.logh {
+  border-top: 1px solid var(--line);
+}
+#counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 16px 12px;
+}
+.count {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+}
+.count b {
+  font-size: 26px;
+  line-height: 1.1;
+}
+.count small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.count.hot {
+  border: 2px solid var(--hot);
+  background: var(--hot-bg);
+  color: var(--hot);
+}
+.count[aria-expanded="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+#pick {
+  margin: 0 16px 12px;
+  padding: 6px;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+}
+#pick h3 {
+  padding: 2px 6px 4px;
+  font-size: 12px;
+}
+#pick h3 .hint {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+.prow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "n z" "t t";
+  gap: 0 8px;
+  width: 100%;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+}
+.prow:hover,
+.prow.sel {
+  background: var(--sel);
+}
+.prow .n {
+  grid-area: n;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prow .z {
+  grid-area: z;
+  color: var(--muted);
+  font-size: 12px;
+}
+.prow .t {
+  grid-area: t;
+  color: var(--muted);
+  font-size: 12px;
+}
+#log-new {
+  margin-left: 6px;
+  color: var(--hot);
+  font-size: 12px;
+}
+#log {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0 0 16px;
+  list-style: none;
+}
+/* 로그 줄(T34): 구분선 대신 줄 사이 간격, 마우스를 올리거나 고르면 카드와 같은 둥근 배경 */
+#log {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  padding-inline: 8px;
+}
+/* 한 줄 = 세션 이름 · 시각 / 내용 · 폴더. 두 줄로 나눠 이름이 잘리지 않게 한다 */
+.lrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "n t" "x z";
+  gap: 0 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 12px !important;
+  background: none;
+  font-size: 12px;
+}
+.lrow > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lrow .n {
+  grid-area: n;
+  font-weight: 600;
+}
+/* 오른쪽 칸은 시간·zone 중 긴 쪽 폭이라 둘 다 오른쪽에 붙인다(T40) */
+.lrow time {
+  grid-area: t;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.lrow .x {
+  grid-area: x;
+}
+.lrow .z {
+  grid-area: z;
+  color: var(--muted);
+  text-align: right;
+}
+.lrow:hover,
+.lrow.sel {
+  background: var(--sel);
+}
+.lrow.gone .n {
+  color: var(--muted);
+}
+.seen {
+  margin: 6px 8px;
+  border-top: 1px dashed var(--hot);
+  color: var(--hot);
+  font-size: 11px;
+  text-align: center;
+}
+/* 하단: 선택한 팀 상세 (기존 우측 패널 내용) */
+#detail {
+  grid-area: detail;
+  overflow: auto;
+  padding: 10px 24px 14px;
+  border-top: 2px solid var(--ink);
+  background: var(--paper);
+}
+.dhead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+}
+.dhead h2 {
+  font-size: 16px;
+}
+.fold-btn {
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--paper);
+  font-size: 12px;
+}
+.chip {
+  padding: 0 8px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.chip.waiting {
+  border-color: var(--hot);
+  background: var(--hot-bg);
+  color: var(--hot);
+}
+.chip.gone {
+  border-color: var(--line);
+  color: var(--muted);
+}
+/* 하단 머리줄의 층 이름표: 건물 층 라벨(.tw-tag)과 같은 Silkscreen 대문자를 슬래브 색 띠에 넣어 건물과 잇는다 */
+.ftag {
+  padding: 1px 6px;
+  background: #2e2826;
+  color: #f3ead8;
+  font-family: "Silkscreen", monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+[data-palette="night"] .ftag {
+  background: #1b1f2c;
+  color: #e6ecff;
+}
+/* branch 칩: 폴더·경로와 섞이지 않게 테두리 칩 + 고정폭 글꼴 */
+.bchip {
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font:
+    11px/1.6 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  white-space: nowrap;
+}
+/* 마지막 요청 = 내가 보낸 말. 인용 블록으로 다른 칸과 구분한다. 노랑은 선택 ▼와 같은 "나"의 색.
+   칸은 다른 칸과 같은 둥근 배경에 노랑을 살짝 섞는다(T35: 인용 막대는 뺐다) */
+#detail .dcol.ask {
+  border: 0;
+  background: color-mix(in srgb, #f2c14e 8%, var(--fill));
+}
+
+.dcols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: 10px;
+}
+.dcol {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.dcol h3 {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.prompt {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.talk,
+.mems {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* 팀장이 한 말: 시각 · 첫 줄(넘치면 말줄임, 전체는 title) */
+.talk li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  padding: 1px 0;
+}
+.talk time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.talk .x {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mems li {
+  padding: 2px 0;
+}
+.mems li > .muted {
+  display: block;
+  padding-left: 1em;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+/* MVP는 전체 화면 기준. 좁은 화면은 깨지지 않을 정도만: 집계를 맨 위로 */
+@media (max-width: 900px) {
+  body {
+    display: flex;
+    flex-direction: column;
+    height: auto;
+  }
+  #side {
+    order: -1;
+    border-left: 0;
+    border-bottom: 2px solid var(--ink);
+  }
+  #log {
+    max-height: 30vh;
+  }
+  #office {
+    padding: 12px 16px 24px;
+  }
+  #detail {
+    padding: 12px 16px;
+  }
+  .dcols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* 패널 경계(T34): 선 대신 바탕 톤 차이(사무실 = --bg, 우측·하단 패널 = --paper)로만 나눈다 */
+#side {
+  border-left: 0;
+}
+.logh {
+  border-top: 0;
+}
+#detail {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-top: 8px;
+  border-top: 0;
+}
+.dhead {
+  flex: none;
+}
+.dcols {
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+  margin-top: 8px;
+}
+.dcol {
+  overflow: auto;
+  padding: 6px 10px;
+}
+.dcol h3 {
+  margin-bottom: 2px;
+}
+/* 줄 높이 18px: 칸 높이(146px)에 목록 6줄이 잘리지 않고 들어간다 */
+:is(.talk, .mems) li {
+  padding: 0;
+  line-height: 18px;
+}
+/* 팀원 한 명 = 한 줄: 이름 · 상태, 그 옆에 지금 하는 일(넘치면 말줄임) */
+.mems li {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+.mems li > .muted {
+  min-width: 0;
+  padding-left: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: inherit;
+}
+/* 패널 상자(T33): 테두리 없이 배경만, 모서리 12px(작은 칩은 알약 모양이 된다).
+   맨 위 전역 규칙 * { border-radius: 0 !important }(건물 도트 화면용)을 이기려고 !important.
+   상태는 테두리 대신 배경으로 보인다(기다림 = 주황 바탕) */
+/* #pick(id)은 따로 둔다. :is() 안에 id가 섞이면 묶음 전체가 id 우선순위가 되어 .count.hot 같은 규칙을 덮는다 */
+:is(.count, .dcol, .chip, .bchip, .fold-btn, .portrait),
+#pick {
+  border: 0;
+  border-radius: 12px !important;
+}
+:is(.count, .dcol, .chip, .bchip, .fold-btn),
+#pick {
+  background: var(--fill);
+}
+/* 기다림(T34): 하단 상태 칩은 바탕을 주황 쪽으로 한 단계 진하게(낮·밤 팔레트를 따라 섞는다).
+   집계 카드 숫자 옆에는 네모 점이 방의 15분+ 맥박과 같은 1.6초로 깜빡인다. 움직임 줄이기면 점만 */
+.chip.waiting {
+  border: 0;
+  background: color-mix(in srgb, var(--hot) 24%, var(--fill));
+  color: var(--hot);
+}
+/* 나를 기다림 카드(T36): 칩(24%)보다 한 단계 더 주황을 섞는다. 바탕이 진해진 만큼 주황 글자는 묻혀서
+   글자는 밝은 --ink(실측 낮 4.7:1·밤 6:1). 꽉 찬 주황(T35)은 너무 강했다 */
+.count.hot {
+  border: 0;
+  background: color-mix(in srgb, var(--hot) 36%, var(--fill));
+  color: var(--ink);
+}
+.count.hot small {
+  color: var(--ink);
+}
+.count.hot b::after {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  background: var(--ink);
+  vertical-align: middle;
+  animation: hot-dot 1.6s ease-in-out infinite;
+}
+@keyframes hot-dot {
+  50% {
+    opacity: 0.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .count.hot b::after {
+    animation: none;
+  }
+}
+/* Fable 반짝이(T46, 하단 초상화 SVG): 사용자 레퍼런스 Accessories.dc.html의 CSS 그대로.
+   건물(canvas)은 tower.mjs fSparkle이 같은 박자로 그린다 */
+@keyframes spk-tw {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.15;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+.spk {
+  animation: spk-tw 1.2s steps(2, jump-none) infinite;
+}
+.spk.b {
+  animation-delay: 0.6s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spk {
+    animation: none;
+  }
+}
+/* 집계 카드의 상태 이름(ui ×1)과 설명(ui-sm ×1)만 도트 글꼴. 숫자는 기존 글꼴 */
+.count span {
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  font-weight: 700;
+  line-height: 16px;
+}
+.count small {
+  font-family: var(--font-ui-sm);
+  font-size: var(--fs-ui-sm);
+  font-weight: 700;
+  line-height: 14px;
+}
+.portrait {
+  padding: 2px;
+  background: var(--fill);
+}
+/* 연결 끊김: 마지막 데이터를 그대로 두고 머리에 띄운다 */
+.offline {
+  padding: 0 8px;
+  border: 2px solid var(--hot);
+  background: var(--hot-bg);
+  color: var(--hot);
+  font-size: 12px;
+  font-weight: 700;
+}
+/* 칠판 → 터미널 결과 중 실패·일부만(앱만 앞으로)일 때의 이유. 4초 뒤 사라진다.
+   아래층 칠판을 눌러도 보이게 스크롤과 무관하게 화면 위 가운데에 띄운다 */
+.focus-msg {
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  z-index: 10;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border: 2px solid #3e7bd6;
+  background: var(--fill);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 튜토리얼(T48, /?tour): 화면 전체를 덮어 클릭을 막고, SVG mask로 짚을 곳만 뚫는다. 위치는 tour.mjs가 잰다 */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+.tour-dim {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.tour-shade {
+  fill: rgb(0 0 0 / 0.62);
+}
+.tour-rings rect {
+  fill: none;
+  stroke: #f2c14e;
+  stroke-width: 2;
+}
+.tour-badge {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  margin: 0;
+  padding: 4px 12px;
+  transform: translateX(-50%);
+  background: #f2c14e;
+  color: #2a1d1a;
+  font-family: var(--font-ui);
+  font-size: var(--fs-ui);
+  font-weight: 700;
+}
+.tour-card {
+  position: absolute;
+  width: min(340px, calc(100vw - 16px));
+  padding: 16px;
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 12px !important;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+}
+.tour-no {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.tour-card h2 {
+  margin: 4px 0 8px;
+  font-family: var(--font-ui);
+  font-size: 16px;
+}
+.tour-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.tour-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 16px;
+}
+.tour-btn {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 999px !important;
+  background: var(--fill);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.tour-btn.primary {
+  background: var(--ink);
+  color: var(--paper);
+}
+.tour-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tour-btn:focus-visible {
+  outline: 2px solid var(--hot);
+  outline-offset: 2px;
+}
+.tour-hint {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+/* 끝내기 소등(T51): 어두워진 동안 "내 사무실로 이동합니다…", 밝아지면 실제 사무실.
+   0.15초는 tour.mjs FADE_MS와 같다. 노란 배지는 같은 자리에서 초록(실제 데이터)으로 바뀐다 */
+.tour-curtain {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  color: #f6f1e3;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
+.tour-curtain p {
+  margin: 0;
+}
+.tour.leaving .tour-curtain {
+  opacity: 1;
+}
+.tour.lit {
+  pointer-events: none;
+}
+.tour.lit .tour-curtain {
+  opacity: 0;
+}
+.tour-badge {
+  transition:
+    background-color 0.15s,
+    opacity 0.3s;
+}
+.tour-badge.live {
+  background: #2e7d3a;
+  color: #fff;
+}
+.tour-badge.bye {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tour-curtain,
+  .tour-badge {
+    transition: none;
+  }
+}

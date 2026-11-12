@@ -1,0 +1,10 @@
+wireframes/*.local.js
+.DS_Store
+
+# PF스타더스트(피나타): 허락 없는 재배포 금지라 git에 넣지 않는다. 받는 법은 README
+wireframes/fonts/PFStardust*.woff2
+public/fonts/PFStardust*.woff2
+
+# 데스크탑 앱(Electron) 설치물과 패키징 산출물
+node_modules/
+dist/

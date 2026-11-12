@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Office</title>
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script type="module" src="/app.mjs"></script>
+  </head>
+  <body data-palette="day">
+    <main id="office">
+      <header class="banner">
+        <h1>Agent Office</h1>
+        <span id="offline" class="offline" role="status" hidden></span>
+        <span id="focus-msg" class="focus-msg" role="status" hidden></span>
+        <!-- 낮·밤 스위치(T30): 하늘 길 위 해·달 손잡이. N 키로도 바뀐다(안내는 title) -->
+        <button
+          type="button"
+          id="night-btn"
+          data-action="night"
+          role="switch"
+          aria-checked="false"
+          aria-label="밤 모드"
+        >
+          <span class="knob"></span>
+        </button>
+      </header>
+      <div class="bld">
+        <div class="floors" id="floors"></div>
+        <div id="basement"></div>
+      </div>
+    </main>
+    <section id="detail" aria-label="선택한 팀 상세"></section>
+    <aside id="side" aria-label="전체 요약">
+      <div class="sh"><h2>상태별 집계</h2></div>
+      <div id="counts"></div>
+      <div id="pick" hidden></div>
+      <div class="sh logh">
+        <h2>로그<span id="log-new"></span></h2>
+      </div>
+      <ol id="log"></ol>
+    </aside>
+    <!-- 미니 모드(ADR 0006): 데스크탑 앱에서만 보인다. 창 우측 하단에 떠 있고, 누르면 큰 창을 숨기고 캐릭터 창들로 전환.
+         단축키는 desktop/main.mjs View 메뉴의 CmdOrCtrl+Shift+M. ponytail: 앱이 macOS 전용(npm run dist)이라 ⇧⌘로 고정 -->
+    <button
+      type="button"
+      id="mini-btn"
+      data-action="mini"
+      aria-label="minimize: 미니 모드로 전환"
+      aria-keyshortcuts="Meta+Shift+M"
+      hidden
+    >
+      minimize ⇧⌘M
+    </button>
+  </body>
+</html>

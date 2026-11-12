@@ -1,0 +1,17 @@
+{
+  "name": "agent-office",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.mjs",
+  "scripts": {
+    "test": "node --test",
+    "desktop": "electron .",
+    "smoke": "node scripts/smoke-pets.mjs",
+    "dist": "electron-packager . \"Agent Office\" --platform=darwin --arch=arm64 --out=dist --overwrite --icon=desktop/icon.icns --ignore=\"^/(\\.git|\\.claude|\\.superpowers|dist|docs|test|v1|wireframes|tickets\\.md|history\\.md)\""
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^45.2.3"
+  }
+}
