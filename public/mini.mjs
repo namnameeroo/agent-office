@@ -1,18 +1,17 @@
-// 미니 모드 화면. 저장(localStorage)은 하지 않는다. 두 모드:
+// 미니 모드 화면. 저장(localStorage)은 하지 않는다. 두 창:
 // - 펫 모드(/mini?pid=N, Electron, ADR 0006 · 설계 v2): 투명 창에 캐릭터 하나. 얼굴·이름표 끌기 = 이동, 더블클릭 = 터미널, 우클릭 = 메뉴
-// - 띠 모드(/mini, 브라우저 미리보기): 세션 전부를 한 줄로. 얼굴 클릭 = 터미널, ▲ = "/"
+// - 허브(/mini?hub=1): hub.mjs가 그린다
+// 인자 없는 /mini(옛 하단 띠, ADR 0005)는 없어졌다 → 큰 사무실("/")로 보낸다
 import { el, sync, setText, setAttr } from "./dom.mjs";
-import { hms } from "./common.mjs";
 import { fetchState, requestFocus } from "./api.mjs";
 import {
   visibleDesks,
   avatarState,
-  elapsedText,
+  stateAttr,
   waitLevel,
   chickCount,
   bubbleText,
   canExpand,
-  overflowCount,
   expandedAfter,
   signText,
   peekLines,
@@ -25,54 +24,46 @@ const PARAMS = new URLSearchParams(location.search);
 // 본부(허브) 창(/mini?hub=1): 캐릭터 대신 타워 엠블럼 + 바로가기. 폴링·캐릭터 렌더는 하지 않는다
 const HUB = PARAMS.has("hub");
 if (HUB) {
-  document.documentElement.classList.add("hub");
   document.body.classList.add("hub");
   import("./hub.mjs");
 }
 const PET = PARAMS.get("pid");
 const petPid = PET ? Number(PET) : null;
 const pet = petPid != null;
-document.documentElement.classList.toggle("pet", pet);
 document.body.classList.toggle("pet", pet);
+if (!HUB && !pet) location.replace("/");
 
 const bar = document.getElementById("bar");
 const row = document.getElementById("row");
-const status = document.getElementById("status");
 
 let desks = [];
 let expanded = null; // 펼친 말풍선의 pid
-let peek = false; // 펫 모드: 잠깐(0.15초) 올려두면 쪽지(위치·요청·지금·링크)를 편다
+let peek = false; // 잠깐(0.15초) 올려두면 쪽지(위치·요청·지금·링크)를 편다
 let offlineSince = null;
-let lastOk = null;
 
 function make(d) {
   const cell = el("div", "cell");
   cell.setAttribute("role", "listitem");
   const msg = el("div", "msg");
   msg.hidden = true;
+  const pk = el("dl", "peek");
+  pk.hidden = true;
   const bubble = el("button", "bubble");
   bubble.type = "button";
   bubble.dataset.action = "bubble";
-  // 표지판 "! 승인": 기다릴 때만(펫 모드), 왜 기다리는지. 얼마나는 이름표 끝의 .wait
+  // 표지판 "! 승인": 기다릴 때만, 왜 기다리는지. 얼마나는 이름표 끝의 .wait
   const sign = el("div", "sign");
   sign.hidden = true;
   sign.append(el("b", null, "!"), el("span", "why"));
   const face = el("button", "face");
   face.type = "button";
-  face.dataset.action = "focus";
   const name = el("div", "name");
-  name.dataset.action = "focus";
-  name.append(el("i", "dot"), el("span", "title"), el("span", "wait"));
-  cell.append(msg, bubble, sign, face, name);
-  if (pet) {
-    const pk = el("dl", "peek");
-    pk.hidden = true;
-    msg.after(pk);
-    name.append(el("span", "where")); // 이름표 둘째 줄: 어디서 도는 세션인지
-    // 등장: 3프레임 낙하(CSS .enter). 끝나면 떼서 다시 안 돌게
-    cell.classList.add("enter");
-    setTimeout(() => cell.classList.remove("enter"), 400);
-  }
+  // 둘째 줄 .where: 어디서 도는 세션인지
+  name.append(el("i", "dot"), el("span", "title"), el("span", "wait"), el("span", "where"));
+  cell.append(msg, pk, bubble, sign, face, name);
+  // 등장: 3프레임 낙하(CSS .enter). 끝나면 떼서 다시 안 돌게
+  cell.classList.add("enter");
+  setTimeout(() => cell.classList.remove("enter"), 400);
   return cell;
 }
 
@@ -88,46 +79,34 @@ function update(cell, d, now) {
   }
   cell.dataset.pid = d.pid;
   // 상태 점·이름표 색·표지판은 CSS가 data-state·data-level로 고른다(설계 v2)
-  setAttr(cell, "data-state", st === "alert" ? "waiting" : st);
-  face.dataset.pid = d.pid;
+  setAttr(cell, "data-state", stateAttr(st));
   setAttr(face, "aria-label", `${d.title} 터미널로`);
   const name = cell.querySelector(".name");
-  name.dataset.pid = d.pid;
   setText(name.querySelector(".title"), d.title);
-  const wait = name.querySelector(".wait");
   const sign = cell.querySelector(".sign");
+  const ms = now - d.since;
   if (d.state === "waiting") {
-    const ms = now - d.since;
-    const level = String(waitLevel(ms));
-    setAttr(name, "data-level", level); // 띠 모드: 이름·경과 색이 5분·15분에 세진다
-    setAttr(cell, "data-level", level); // 펫 모드: 5분부터 이름표 빨강, 15분부터 표지판 깜빡임
+    // 5분부터 이름표 빨강, 15분부터 표지판 깜빡임
+    setAttr(cell, "data-level", String(waitLevel(ms)));
     setText(sign.querySelector(".why"), signText(d));
-    sign.hidden = !pet;
+    sign.hidden = false;
   } else {
-    name.removeAttribute("data-level");
     cell.removeAttribute("data-level");
     sign.hidden = true;
   }
-  // 경과: 띠 모드는 기다릴 때만, 펫 모드는 늘(이 상태로 얼마나 — 오래 도는 작업·방금 끝난 일을 가린다)
-  const ms = now - d.since;
-  setText(
-    wait,
-    pet ? elapsedShort(ms) : d.state === "waiting" ? elapsedText(ms) : "",
-  );
-  const where = name.querySelector(".where");
-  if (where) setText(where, whereShort(d));
+  // 경과: 늘 보인다(이 상태로 얼마나 — 오래 도는 작업·방금 끝난 일을 가린다)
+  setText(name.querySelector(".wait"), elapsedShort(ms));
+  setText(name.querySelector(".where"), whereShort(d));
   const pk = cell.querySelector(".peek");
-  if (pk) {
-    const lines = peek && !open ? peekLines(d) : [];
-    const sig = JSON.stringify(lines);
-    if (pk.dataset.sig !== sig) {
-      pk.dataset.sig = sig;
-      pk.replaceChildren(
-        ...lines.flatMap(([k, v]) => [el("dt", null, k), el("dd", null, v)]),
-      );
-    }
-    pk.hidden = !lines.length;
+  const lines = peek && !open ? peekLines(d) : [];
+  const lsig = JSON.stringify(lines);
+  if (pk.dataset.sig !== lsig) {
+    pk.dataset.sig = lsig;
+    pk.replaceChildren(
+      ...lines.flatMap(([k, v]) => [el("dt", null, k), el("dd", null, v)]),
+    );
   }
+  pk.hidden = !lines.length;
   const bubble = cell.querySelector(".bubble");
   const text = open ? d.full : bubbleText(d);
   bubble.hidden = text == null;
@@ -149,7 +128,7 @@ function update(cell, d, now) {
     delete cell.dataset.open;
     bubble.style.maxHeight = "";
   }
-  if (pet) cell.classList.toggle("offline", offlineSince != null);
+  cell.classList.toggle("offline", offlineSince != null);
 }
 
 // 펫 모드: 창을 캐릭터(말풍선·표지판·문구 포함) 크기에 맞춘다. body는 height:100%라 못 쓰고 .cell을 잰다.
@@ -176,10 +155,10 @@ function sendFit() {
 const ro =
   pet && "ResizeObserver" in window ? new ResizeObserver(sendFit) : null;
 
+// 펫 모드에서만 불린다(폴링·이벤트가 모두 펫 모드 안)
 function render() {
   const now = Date.now();
-  let list = visibleDesks(desks, now);
-  if (pet) list = list.filter((d) => d.pid === petPid);
+  const list = visibleDesks(desks, now).filter((d) => d.pid === petPid);
   expanded = expandedAfter(expanded, list); // 세션이 사라지거나 펼칠 말풍선이 없어지면 접는다
   sync(
     row,
@@ -190,36 +169,19 @@ function render() {
   );
   document.body.classList.toggle("offline", offlineSince != null);
 
-  if (pet) {
-    const cell = row.firstElementChild;
-    if (cell && observed !== cell) {
-      observed = cell;
-      ro?.observe(cell);
-      for (const c of cell.children) ro?.observe(c); // 칸 폭이 고정이라 넘치는 자식(이름표·말풍선·쪽지)의 크기 변화도 따로 본다
-    }
-    sendFit();
-    return;
+  const cell = row.firstElementChild;
+  if (cell && observed !== cell) {
+    observed = cell;
+    ro?.observe(cell);
+    for (const c of cell.children) ro?.observe(c); // 칸 폭이 고정이라 넘치는 자식(이름표·말풍선·쪽지)의 크기 변화도 따로 본다
   }
-
-  let empty = row.querySelector(".empty");
-  if (!list.length && !empty)
-    row.prepend(el("div", "empty", "떠 있는 Claude Code 터미널이 없다"));
-  else if (list.length && empty) empty.remove();
-
-  const parts = [];
-  if (offlineSince != null)
-    parts.push(`연결 끊김 · ${lastOk ? hms(lastOk) : "--:--:--"}`);
-  const over = overflowCount(list.length, row.clientWidth);
-  if (over > 0) parts.push(`+${over}`);
-  setText(status, parts.join(" · "));
-  bar.classList.toggle("offline", offlineSince != null);
+  sendFit();
 }
 
 async function poll() {
   try {
     ({ desks } = await fetchState());
     offlineSince = null;
-    lastOk = Date.now();
   } catch {
     offlineSince ??= Date.now();
   }
@@ -246,31 +208,17 @@ const toggleExpand = (pid) => {
   render();
 };
 
+// 한 번 클릭은 말풍선 펼침·접힘만. 얼굴·이름표는 아무 일도 하지 않는다(끌기·더블클릭과 섞이지 않게)
 document.addEventListener("click", (e) => {
   const a = e.target.closest("[data-action]");
-  if (!a) {
-    if (!pet && expanded != null) {
-      expanded = null;
-      render();
-    }
-    return;
-  }
-  const pid = Number(a.dataset.pid);
-  // 펫 모드에서 한 번 클릭은 아무 일도 하지 않는다(끌기·더블클릭과 섞이지 않게)
-  if (a.dataset.action === "focus" && !pet)
-    return void focusDesk(a.closest(".cell"), pid);
-  if (a.dataset.action === "bubble" && a.dataset.static === undefined)
-    toggleExpand(pid);
+  if (a?.dataset.action === "bubble" && a.dataset.static === undefined)
+    toggleExpand(Number(a.dataset.pid));
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && expanded != null) {
     expanded = null;
     render();
   }
-});
-document.getElementById("open").addEventListener("click", () => {
-  if (window.agentOffice) window.agentOffice.openOffice();
-  else location.href = "/";
 });
 
 // ── 펫 모드: 끌기·더블클릭·우클릭 ──
@@ -356,7 +304,7 @@ const setStill = () =>
 still.addEventListener("change", setStill);
 document.addEventListener("visibilitychange", setStill);
 setStill();
-if (!HUB) {
+if (pet) {
   addEventListener("resize", render);
   poll();
 }

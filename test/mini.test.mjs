@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   visibleDesks,
   avatarState,
-  elapsedText,
+  stateAttr,
   waitLevel,
   chickCount,
   bubbleText,
   canExpand,
-  overflowCount,
   expandedAfter,
 } from "../public/mini-model.mjs";
 
@@ -47,13 +47,6 @@ test("avatarState: waiting→alert, working→work, 5분 안 resting→done, 그
   assert.equal(avatarState(d(1, "working", NOW), NOW), "work");
   assert.equal(avatarState(d(1, "resting", NOW - 4 * 60e3), NOW), "done");
   assert.equal(avatarState(d(1, "resting", NOW - 6 * 60e3), NOW), "idle");
-});
-
-test("elapsedText: 분, 시간+분, 음수는 0m", () => {
-  assert.equal(elapsedText(7 * 60e3), "7m");
-  assert.equal(elapsedText(72 * 60e3), "1h 12m");
-  assert.equal(elapsedText(-5), "0m");
-  assert.equal(elapsedText(NaN), "0m");
 });
 
 test("waitLevel: 5분·15분 경계", () => {
@@ -117,12 +110,6 @@ test("canExpand: 보이는 글과 full이 같거나 full이 없으면 false, 작
   assert.equal(canExpand(d(1, "waiting", NOW, { bubble: "답변 필요" })), false);
 });
 
-test("overflowCount: 칸 80·여백 24 기준으로 안 보이는 수", () => {
-  assert.equal(overflowCount(30, 1440), 13);
-  assert.equal(overflowCount(3, 1440), 0);
-  assert.equal(overflowCount(0, 300), 0);
-});
-
 test("expandedAfter: 펼친 세션이 사라지거나 펼칠 말풍선이 없어지면 null", () => {
   const list = [
     d(1, "waiting", NOW, { bubble: "질문 남김: 진행?", full: "서두\n진행?" }),
@@ -136,8 +123,30 @@ test("expandedAfter: 펼친 세션이 사라지거나 펼칠 말풍선이 없어
   assert.equal(expandedAfter(null, list), null);
 });
 
-test("overflowCount: rowWidth(▲ 40px 뺀 #row 너비) 기준 — 왼쪽 여백 24만 뺀다", () => {
-  assert.equal(overflowCount(30, 1384), 13); // floor((1384-24)/80) = 17
+// CSS가 찾는 이름과 코드가 붙이는 이름이 어긋나면 규칙이 조용히 안 먹는다(예: CSS "working" · 코드 "work" → 초록 점이 안 켜짐)
+test("mini.css의 data-state·data-level 값은 전부 mini.mjs가 실제로 붙이는 값이다", () => {
+  const read = (f) => readFileSync(new URL(`../public/${f}`, import.meta.url), "utf8");
+  const css = read("mini.css");
+  // mini.mjs는 이 두 식으로 붙인다 — 바꾸면 아래 값 모음도 같이 바꿔야 한다
+  assert.match(read("mini.mjs"), /setAttr\(cell, "data-state", stateAttr\(st\)\)/);
+  assert.match(read("mini.mjs"), /setAttr\(cell, "data-level", String\(waitLevel\(ms\)\)\)/);
+  const attached = {
+    // avatarState의 모든 갈래: 기다림 · 작업 · 갓 쉼 · 오래 쉼
+    "data-state": [
+      d(1, "waiting", NOW),
+      d(1, "working", NOW),
+      d(1, "resting", NOW),
+      d(1, "resting", NOW - 3600e3),
+    ].map((x) => stateAttr(avatarState(x, NOW))),
+    // waitLevel의 모든 갈래: 5분 전 · 5~15분 · 15분 뒤
+    "data-level": [0, 5 * 60e3, 15 * 60e3].map((ms) => String(waitLevel(ms))),
+  };
+  for (const [attr, ok] of Object.entries(attached)) {
+    const inCss = [...css.matchAll(new RegExp(`\\[${attr}="([^"]*)"\\]`, "g"))].map((m) => m[1]);
+    assert.ok(inCss.length, `mini.css에 [${attr}] 선택자가 없다`);
+    for (const v of new Set(inCss))
+      assert.ok(ok.includes(v), `mini.css의 [${attr}="${v}"]는 코드가 붙이지 않는다(붙이는 값: ${ok.join(", ")})`);
+  }
 });
 
 test("signText: 왜 기다리는지 — 승인·질문, 모르면 답 필요", async () => {

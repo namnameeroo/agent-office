@@ -1,10 +1,10 @@
 // 미니 모드의 순수 판정. DOM·tower.mjs를 import하지 않아 node --test에서 그대로 돈다.
-// 서버 판정(state·bubble·full)은 그대로 받고, 띠에 어떻게 줄 세우고 무엇을 보일지만 정한다.
+// 서버 판정(state·bubble·full)은 그대로 받고, 어떤 세션을 어떤 순서로 띄우고 무엇을 보일지만 정한다.
 import { FRESH_MS, firstLine, latestLinks } from "./common.mjs";
 
 const ORDER = { waiting: 0, working: 1, resting: 2 };
 
-// 휴면은 띠에 없다. 기다림(오래 기다린 순) → 작업 중 → 휴식. 같은 상태 안은 입력 순서
+// 휴면은 띄우지 않는다. 기다림(오래 기다린 순) → 작업 중 → 휴식. 같은 상태 안은 입력 순서
 export function visibleDesks(desks, now) {
   return desks
     .map((d, i) => [d, i])
@@ -24,10 +24,8 @@ export function avatarState(d, now) {
   return now - d.since < FRESH_MS ? "done" : "idle";
 }
 
-export function elapsedText(ms) {
-  const m = Math.max(0, Math.floor((Number(ms) || 0) / 60e3));
-  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
-}
+// 칸의 data-state(CSS가 상태 점·말풍선 테를 고른다): avatarState 값 그대로, alert만 waiting
+export const stateAttr = (st) => (st === "alert" ? "waiting" : st);
 
 // 큰 창 tower.mjs의 waitLevel과 같은 경계(5분·15분)
 export const waitLevel = (ms) => (ms < 5 * 60e3 ? 1 : ms < 15 * 60e3 ? 2 : 3);
@@ -42,16 +40,12 @@ export const bubbleText = (d) =>
 export const canExpand = (d) =>
   bubbleText(d) != null && !!d.full && d.full !== bubbleText(d);
 
-// 펼친 말풍선을 유지할지: 그 세션이 아직 띠에 있고 펼칠 말풍선이 있을 때만. 사라지거나 작업 중으로 바뀌면 접는다
+// 펼친 말풍선을 유지할지: 그 세션이 아직 보이고 펼칠 말풍선이 있을 때만. 사라지거나 작업 중으로 바뀌면 접는다
 export function expandedAfter(expanded, list) {
   if (expanded == null) return null;
   const cur = list.find((d) => d.pid === expanded);
   return cur && canExpand(cur) ? expanded : null;
 }
-
-// rowWidth = #row의 너비(▲ 칸 40px은 이미 빠져 있다). 칸 80px, 왼쪽 여백 24px
-export const overflowCount = (n, rowWidth) =>
-  Math.max(0, n - Math.floor((rowWidth - 24) / 80));
 
 // 표지판: 왜 기다리는지(짧게). 얼마나 기다렸는지는 이름표가 말한다
 const WHY = { permission: "승인", question: "질문" };

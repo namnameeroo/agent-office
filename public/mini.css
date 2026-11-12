@@ -1,234 +1,26 @@
-/* 미니 모드(하단 띠). 1 art px = 2px. 띠 96px = 말풍선 36 · 아바타 44 · 이름 16. 큰 창 style.css는 싣지 않는다 */
-@font-face {
-  font-family: "PFStardust";
-  src: url(fonts/PFStardust.woff2) format("woff2");
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: "PFStardust";
-  src: url(fonts/PFStardustBold.woff2) format("woff2");
-  font-weight: 700;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Galmuri11";
-  src: url(fonts/Galmuri11.woff2) format("woff2");
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Galmuri11";
-  src: url(fonts/Galmuri11-Bold.woff2) format("woff2");
-  font-weight: 700;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Silkscreen";
-  src: url(fonts/Silkscreen.woff2) format("woff2");
-  font-weight: 400;
-  font-display: swap;
-}
-
-:root {
-  --bg: #2f3542;
-  --ink: #2a1d1a;
-  --cream: #fffaf0;
-  --name: #d9dde6;
-  --dim: #8d94a3;
-  --wait1: #f2c14e;
-  --wait2: #f08a4b;
-  --wait3: #e05a5a;
-  --font: "PFStardust", "Galmuri11", "Silkscreen", monospace;
-}
+/* 미니 모드 화면. 큰 창 style.css는 싣지 않는다. 둘 다 Electron 투명 창이라 바탕을 칠하지 않는다.
+   - 펫(/mini?pid=N, ADR 0006): 창 하나에 캐릭터 하나
+   - 허브(/mini?hub=1): 타워 타일 판 하나
+   인자 없는 /mini(옛 하단 띠, ADR 0005)는 없어졌고 mini.mjs가 "/"로 보낸다 */
 html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--bg);
-  color: var(--name);
-  font-family: var(--font);
-  font-size: 12px;
-  line-height: 12px;
-  -webkit-font-smoothing: none;
+  background: transparent; /* 창이 비친다 */
   overflow: hidden;
   user-select: none;
 }
+/* 창 바닥에 붙인다: 위(말풍선·쪽지)로 자라도 캐릭터·판은 아래에 남는다 */
 #bar {
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 40px;
+  grid-template-columns: 1fr;
   align-items: end;
 }
 #row {
   display: flex;
   align-items: end;
-  gap: 0;
-  padding-left: 24px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
   height: 100%;
-}
-#row::-webkit-scrollbar {
-  display: none;
-}
-.empty {
-  align-self: center;
-  color: var(--dim);
-  white-space: nowrap;
-}
-#status {
-  color: var(--dim);
-  white-space: nowrap;
-  padding: 0 8px 2px 0;
-  line-height: 16px;
-}
-#open {
-  width: 40px;
-  height: 100%;
-  border: 0;
-  background: transparent;
-  color: var(--name);
-  font: inherit;
-  font-size: 14px;
-  cursor: pointer;
-}
-#open:hover,
-#open:focus-visible {
-  color: var(--cream);
-  outline: none;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* 한 칸 80px: 말풍선 줄(위) · 아바타 · 이름 */
-.cell {
-  position: relative;
-  flex: 0 0 80px;
-  display: grid;
-  grid-template-rows: 36px 44px 16px;
-  align-items: end;
-  justify-items: center;
-}
-.cell > * {
-  min-width: 0;
-}
-.bubble {
-  grid-row: 1;
-}
-.face {
-  grid-row: 2;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
-  width: 80px;
-  height: 44px;
-  display: block;
-}
-.face svg {
-  display: block;
-}
-.face:focus-visible {
-  outline: 2px solid var(--cream);
-  outline-offset: -2px;
-}
-/* 이름 줄: 제목은 줄여도 경과 시간은 항상 보인다(flex, .wait는 안 줄어듦) */
-.name {
-  grid-row: 3;
-  width: 76px;
-  display: flex;
-  justify-content: center;
-  white-space: nowrap;
-  line-height: 16px;
-  cursor: pointer;
-}
-.title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.wait {
-  flex: 0 0 auto;
-}
-.wait:not(:empty) {
-  margin-left: 4px;
-}
-.name[data-level="1"] {
-  color: var(--wait1);
-}
-.name[data-level="2"] {
-  color: var(--wait2);
-}
-.name[data-level="3"] {
-  color: var(--wait3);
-}
-
-/* 시안 .resp: 크림 바탕, 4px 검정 박스 섀도 테두리, 왼쪽 아래 꼬리 */
-.bubble {
-  position: relative;
-  justify-self: start;
-  margin-left: 24px;
-  margin-bottom: 10px;
-  max-width: 160px;
-  padding: 4px 8px;
-  border: 0;
-  font: inherit;
-  text-align: left;
-  color: var(--ink);
-  background: var(--cream);
-  box-shadow:
-    0 -4px 0 0 var(--ink),
-    0 4px 0 0 var(--ink),
-    -4px 0 0 0 var(--ink),
-    4px 0 0 0 var(--ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: pointer;
-  z-index: 1;
-}
-.bubble::after {
-  content: "";
-  position: absolute;
-  left: 12px;
-  bottom: -4px;
-  width: 4px;
-  height: 4px;
-  background: var(--cream);
-  box-shadow:
-    4px 0 0 var(--cream),
-    0 4px 0 var(--cream),
-    -4px 4px 0 var(--ink),
-    4px 4px 0 var(--ink),
-    -4px 8px 0 var(--ink),
-    0 8px 0 var(--ink);
-}
-.bubble[data-static] {
-  cursor: default;
-}
-.bubble[data-open] {
-  max-width: 420px;
-  overflow-y: auto; /* 최대 높이는 mini.mjs가 화면 높이로 정한다(창 상한 60%보다 길면 안에서 스크롤) */
-  white-space: pre-wrap;
-  overflow-x: hidden;
-  text-overflow: clip;
-  line-height: 16px;
-  z-index: 2;
-}
-.cell[data-open] {
-  grid-template-rows: auto 44px 16px;
-}
-.msg {
-  position: absolute;
-  bottom: 62px;
-  left: 0;
-  max-width: 240px;
-  padding: 2px 6px;
-  background: var(--wait3);
-  color: var(--cream);
-  white-space: nowrap;
-  z-index: 3;
 }
 
 /* 둥둥(시안 bob 1.4s step-end)과 김·반짝임 깜빡임. 병아리는 0.35s 늦게 */
@@ -272,31 +64,10 @@ body {
     animation: none;
   }
 }
-#bar.offline .cell {
-  opacity: 0.5;
-}
 
-/* ── 펫 모드(/mini?pid=N, ADR 0006): 투명 창 하나에 캐릭터 하나. 띠 요소는 없다 ──
+/* ── 펫 모드(/mini?pid=N, ADR 0006): 투명 창 하나에 캐릭터 하나 ──
    모습: 캐릭터만 픽셀, 주변(말풍선·이름표·표지판·쪽지)은 macOS 문법 — 둥근 모서리, 반투명 재질, 가는 테두리 + 부드러운 그림자, 시스템 색.
    투명 창이라 뒤 화면을 흐리는 진짜 재질(backdrop-filter)은 못 쓰고 거의 불투명한 채움으로 흉내 낸다. 그림자는 창(= .cell) 안에서 끝나야 해 padding을 둔다 */
-html.pet,
-body.pet,
-body.pet #bar {
-  background: transparent; /* html에도 --bg가 칠해져 있어 셋 다 투명해야 창이 비친다 */
-}
-body.pet #bar {
-  grid-template-columns: 1fr;
-  align-items: end;
-}
-body.pet #status,
-body.pet #open {
-  display: none;
-}
-body.pet #row {
-  padding-left: 0;
-  overflow: visible;
-  align-items: end;
-}
 body.pet .cell {
   --label: #1d1d1f;
   --label2: rgba(60, 60, 67, 0.62);
@@ -351,6 +122,10 @@ body.pet .face svg {
   display: block;
   position: relative; /* 받침 위에 */
 }
+body.pet .face:focus-visible {
+  outline: 2px solid #fffaf0;
+  outline-offset: -2px;
+}
 /* 받침: 머리 뒤의 옅은 흰 빛(머리 중심 40,16 · 64×46). 어두운·복잡한 배경에서 잉크 윤곽이 묻히지 않게.
    blur 필터 대신 그라데이션이라 얼굴 칸 밖으로 번지지 않는다 */
 body.pet .face::before {
@@ -381,7 +156,6 @@ body.pet .cell.dragging .face::before {
 /* 이름표: 어두운 재질 판 + 밝은 머리카락 테두리(어두운 바탕에서도 윤곽이 남는다). 첫 줄 점 · 제목 · 경과, 둘째 줄 위치 */
 body.pet .name {
   grid-row: 6;
-  width: auto; /* 띠 모드의 width 76 되돌림 */
   min-width: 80px;
   max-width: 116px;
   margin-top: 2px;
@@ -428,7 +202,6 @@ body.pet .name .where {
 }
 /* 경과 시간: 이 상태로 얼마나. 제목보다 한 단계 흐리게, 숫자 폭 고정 */
 body.pet .name .wait {
-  margin-left: 0;
   opacity: 0.6;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
@@ -491,8 +264,8 @@ body.pet .cell[data-level="3"] .sign {
    접힌 모습은 칸(128px) 안에서 두 줄 — 옆 캐릭터를 덮지 않는다. 전문은 눌러서 */
 body.pet .bubble {
   grid-row: 3;
-  justify-self: safe center; /* 띠 모드의 start 되돌림 */
   position: relative;
+  z-index: 1; /* 그림자가 아래 얼굴(받침) 위로 */
   margin: 0 0 6px;
   max-width: 108px;
   padding: 5px 9px 0;
@@ -506,7 +279,6 @@ body.pet .bubble {
   cursor: pointer;
   box-shadow: var(--lift);
   overflow: hidden;
-  white-space: normal; /* 띠 모드의 nowrap 되돌림 */
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -515,9 +287,6 @@ body.pet .bubble {
 }
 body.pet .bubble[hidden] {
   display: none;
-}
-body.pet .bubble::after {
-  content: none; /* 띠 모드의 픽셀 꼬리 없음 */
 }
 body.pet .cell[data-state="waiting"] .bubble {
   box-shadow:
@@ -555,8 +324,7 @@ body.pet .bubble[data-open]::before {
 /* 포커스 실패 문구: 빨간 판, 맨 위 */
 body.pet .msg {
   grid-row: 1;
-  position: static; /* 띠 모드의 absolute 되돌림 */
-  white-space: normal;
+  z-index: 3; /* 아래 판들의 그림자 위로 */
   justify-self: start;
   margin: 0 0 6px;
   max-width: 240px;
@@ -690,24 +458,6 @@ body.pet .cell.offline .sign {
 
 /* ── 본부(허브) 창(/mini?hub=1): 벤토 타일 하나(판 96×60). 타워 52px(26px 맵 ×2) = 큰 사무실, 오른쪽 32×24 아이콘 둘 = 정렬 · 새 터미널.
    커서: 버튼 위 pointer, 판의 빈 바탕(패딩·간격)만 grab, 끄는 동안(.dragging) 전부 grabbing ── */
-html.hub,
-body.hub,
-body.hub #bar {
-  background: transparent;
-}
-body.hub #bar {
-  grid-template-columns: 1fr;
-  align-items: end;
-}
-body.hub #status,
-body.hub #open {
-  display: none;
-}
-body.hub #row {
-  padding-left: 0;
-  overflow: visible;
-  align-items: end;
-}
 body.hub .hub {
   --label: #1d1d1f;
   --light: rgba(251, 251, 253, 0.95);
@@ -727,6 +477,8 @@ body.hub .hub {
   cursor: grab;
   user-select: none;
   width: max-content;
+  /* ponytail: 옛 띠 바탕(body)에서 물려받던 값을 그대로 옮겼다 — 배지 숫자가 안티앨리어싱 없이 그려진다. 매끈하게 하려면 지우면 된다(모습이 바뀜) */
+  -webkit-font-smoothing: none;
 }
 body.hub .side {
   display: flex;
