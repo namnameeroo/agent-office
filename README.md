@@ -71,7 +71,13 @@ node server.mjs
   - 머리줄: [층 이름표][제목][경로][branch 칩]
   - 칸: 마지막 요청(인용 블록) · 팀장이 한 말(최근 8개 첫 줄) · 팀원
 - 머리줄의 해·부엉이 스위치나 `N` 키로 낮·밤 팔레트를 바꾼다.
-- **미니 모드**(데스크탑 앱, [ADR 0006](docs/adr/0006-mini-pets.md)): 머리줄 `▼ 미니` 또는 `Cmd+Shift+M`을 누르면 큰 창이 숨고, 휴면이 아닌 세션마다 **캐릭터가 바탕화면 위에 떠 있는 작은 투명 창**이 된다. 큰 얼굴 아바타(노트북 = 작업 중, 커피 = 휴식, 손 들기 = 나를 기다림 + 경과, 깃발 = 방금 끝남), 일하는 팀원은 병아리(`+N`). 말풍선은 기다림·방금 끝남에만 뜨고 누르면 전문이 펼쳐진다. 얼굴·이름표를 **끌어 옮기고**(자리 기억), **더블클릭**하면 터미널, **우클릭**하면 메뉴(터미널·큰 사무실·말풍선·종료). 서버가 끊기면 전부 반투명·정지. 큰 창으로 돌아오려면 `Cmd+Shift+M`이나 Dock 아이콘 클릭. 브라우저의 `/mini`는 개발용 미리보기(띠)다.
+- **미니 모드**(데스크탑 앱, [ADR 0006](docs/adr/0006-mini-pets.md)): 큰 창 오른쪽 아래의 `minimize ⇧⌘M` 버튼이나 `Cmd+Shift+M`을 누르면 큰 창이 숨고, 휴면이 아닌 세션마다 **캐릭터가 바탕화면 위에 떠 있는 작은 투명 창**이 된다.
+  - **캐릭터**: 큰 얼굴 아바타(노트북 = 작업 중, 커피 = 휴식, 손 들기 = 나를 기다림, 깃발 = 방금 끝남), 일하는 팀원은 병아리. 이름표는 상태 점 · 제목 · 이 상태로 얼마나(`7m`·`5h`·`5d`), 둘째 줄에 구역(› worktree). 점은 초록 = 작업 중, **초록 고리 = 턴은 끝났고 백그라운드 명령만 실행 중**, 주황 = 기다림, 노랑 = 방금 끝남. 기다릴 땐 머리 위에 이유 배지(`! 승인`·`! 질문`), 5분부터 이름표가 빨강.
+  - **말풍선**: 늘 떠서 그 세션의 최근 응답을 두 줄로 보인다(기다릴 땐 무엇을 승인·답할지). 누르면 전문이 마크다운(굵게·코드·목록·링크)으로 펼쳐지고, 주소는 눌러서 기본 브라우저로 연다.
+  - **올려두면**: 쪽지가 뜬다 — 위치(구역·worktree·브랜치) / 내 마지막 요청 / 지금 하는 동작 / PR·Jira 링크.
+  - **조작**: 얼굴·이름표를 **끌어 옮기고**(자리 기억, 다른 모니터로도), **더블클릭**하면 터미널, **우클릭**하면 메뉴(터미널 앞으로·큰 사무실·말풍선 펼치기·응답 복사·종료).
+  - **허브**: 타워 타일 창. 타워 = 큰 사무실, 아이콘 = 캐릭터 한 줄 정렬 · 새 터미널 · **캐릭터 한꺼번에 숨김/보임**(숨긴 동안 나를 기다리는 수를 빨간 배지로).
+  - 서버가 끊기면 캐릭터가 반투명·정지. 큰 창으로 돌아오려면 `Cmd+Shift+M`, 허브의 타워, Dock 아이콘 클릭.
 
 ## 테스트
 
@@ -106,8 +112,10 @@ node --test
 | `server.mjs` | HTTP 서버. 1초마다 수집, `GET /api/state`, `POST /api/focus`, 정적 파일(`public/`), CSP |
 | `desktop/main.mjs` | Electron 껍데기. 서버를 앱 안에서 띄우고 창에 연다. 창 만들기(`openWindow`)는 서버 기동과 분리돼 있어 미니 모드 창을 더할 수 있다 |
 | `desktop/preload.cjs` | 렌더러가 메인에 시킬 수 있는 것(`agentOffice.openOffice·openMini·fit·dragTo·dragEnd·onRoom·menu·arrange·newTerminal·togglePets`) |
-| `desktop/pets.mjs` | 캐릭터 창 기하(빈 칸 배치·크기 맞춤·화면 안 자르기). 순수 함수 |
-| `public/hub.mjs` | 본부(허브) 창: 픽셀 타워 엠블럼 + 사무실·정렬·새 터미널 바로가기(플로팅 모드) |
+| `desktop/pets.mjs` | 캐릭터 창 기하(빈 칸 배치·크기 맞춤·화면 가장자리 처리). 순수 함수 |
+| `desktop/debug.mjs` | 검증용 탐침(환경변수로 켜는 캡처·로그). 평소에는 아무 일도 하지 않는다 |
+| `scripts/smoke-pets.mjs` | `npm run smoke`: 개발용 Electron을 다른 포트·임시 저장 폴더로 띄워 캐릭터 창의 불변식(가운데 정렬, 가장자리에서 제자리, 숨김 토글, 링크·복사 등)을 단언한다. 떠 있는 앱과 저장된 캐릭터 위치는 건드리지 않는다 |
+| `public/hub.mjs` | 본부(허브) 창: 픽셀 타워 엠블럼 + 사무실·정렬·새 터미널·캐릭터 숨김 토글 |
 | `lib/focus.mjs` | 세션 pid → 터미널(Orca·Ghostty·앱) 판별과 포커스 이동 |
 | `scripts/icon.mjs` | 앱 아이콘 생성. 26×26 픽셀 맵(마스코트 시안 B)을 정수 배율로 확대해 `desktop/icon.icns`로 묶는다(Node 내장 모듈 + `iconutil`). 맵을 고치면 `node scripts/icon.mjs`로 재생성 |
 | `lib/sources.mjs` | 세션 파일·기록 읽기, 구역 계산, 사무실 수집(세션별 링크 캐시 포함) |
@@ -115,7 +123,7 @@ node --test
 | `lib/links.mjs` | 세션 기록에서 PR·Jira·artifact 링크 칩 추출 |
 | `lib/history.mjs` | 상태 변화 로그와 퇴근한 팀장 2시간 보관 |
 | `lib/static.mjs` | 정적 파일 경로 허용 목록 |
-| `public/` | 화면. `index.html`, `style.css`, `app.mjs`(폴링·이벤트), `tower.mjs`(건물), `panels.mjs`(우측·하단), `common.mjs`, `dom.mjs`(key 재사용 갱신), `tour.mjs`(`/?tour` 튜토리얼: 예시 데이터 · spotlight), `api.mjs`(서버 호출), `mini.html`·`mini.mjs`·`mini.css`(미니 모드 띠), `mini-model.mjs`(미니 순수 판정), `mini-sprites.mjs`(큰 얼굴 아바타), `fonts/` |
+| `public/` | 화면. `index.html`, `style.css`, `app.mjs`(폴링·이벤트), `tower.mjs`(건물), `panels.mjs`(우측·하단), `common.mjs`, `dom.mjs`(key 재사용 갱신), `tour.mjs`(`/?tour` 튜토리얼: 예시 데이터 · spotlight), `api.mjs`(서버 호출), `mini.html`·`mini.mjs`·`mini.css`(미니 모드 캐릭터 창·허브), `mini-model.mjs`(미니 순수 판정·마크다운 토큰), `drag.mjs`(캐릭터·허브 공용 끌기), `mini-sprites.mjs`(큰 얼굴 아바타), `fonts/` |
 | `test/` | `node --test` 테스트 |
 
 ## 문서
