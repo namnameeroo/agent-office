@@ -5,15 +5,16 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("agentOffice", {
   openOffice: () => ipcRenderer.invoke("office:open"),
   openMini: () => ipcRenderer.invoke("mini:open"),
-  // fit·dragTo → { shiftX, roomAbove } | false(desktop/pets.mjs fitRoom). shiftX: 오른쪽 끝에 걸려 창이 앵커보다 왼쪽으로 밀린 px
-  // (캐릭터 열을 그만큼 오른쪽으로). roomAbove: 창이 아래 모서리에서 위로 자랄 수 있는 높이(펼친 말풍선 최대 높이의 기준)
+  // fit·dragTo → { shiftX, roomAbove } | { shiftX, down, roomBelow, footY } | false(desktop/pets.mjs fitRoom). shiftX: 오른쪽 끝에 걸려
+  // 창이 앵커보다 왼쪽으로 밀린 px(캐릭터 열을 그만큼 오른쪽으로). roomAbove/roomBelow: 창이 위로/아래로 자랄 수 있는 높이(펼친 말풍선 최대 높이의 기준).
+  // down: 화면 위쪽 절반 → 창이 위 끝을 고정하고 아래로 자란다(말풍선이 얼굴 아래). footY: 창 위 끝에서 발밑까지(끌기 기준). opts.base: 얼굴·이름표 칸 높이
   fit: (w, h, opts) => ipcRenderer.invoke("pet:fit", w, h, opts ?? {}),
   dragTo: (x, y) => ipcRenderer.invoke("pet:drag", x, y),
   // 메인이 스스로 창을 옮겼을 때(허브 정렬·디스플레이 변경) 같은 값을 보낸다
   onRoom: (cb) => ipcRenderer.on("pet:room", (_e, room) => cb(room)),
   dragEnd: () => ipcRenderer.invoke("pet:drag-end"),
   menu: (pid, info) => ipcRenderer.invoke("pet:menu", pid, info ?? {}),
-  arrange: () => ipcRenderer.invoke("hub:arrange"),
+  arrange: (side) => ipcRenderer.invoke("hub:arrange", side), // side "top" = 위 한 줄, 그 밖 = 아래 한 줄
   newTerminal: () => ipcRenderer.invoke("hub:terminal"),
   togglePets: () => ipcRenderer.invoke("hub:pets"), // → 지금 숨김인지(boolean)
 });

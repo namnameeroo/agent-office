@@ -45,9 +45,11 @@ let desks = [];
 let expanded = null; // 펼친 말풍선의 pid
 let peek = false; // 잠깐(0.15초) 올려두면 쪽지(위치·요청·지금·링크)를 편다
 let offlineSince = null;
-// 메인이 마지막으로 알려 준 창 사정(pet:fit·pet:drag 응답, pet:room) + 그때의 내용물 폭 w.
-// shiftX: 오른쪽 끝에 걸려 창이 앵커보다 왼쪽으로 밀린 px. roomAbove: 창이 아래 모서리에서 위로 자랄 수 있는 높이
+// 메인이 마지막으로 알려 준 창 사정(pet:fit·pet:drag 응답, pet:room = desktop/pets.mjs fitRoom) + 그때의 내용물 폭 w.
+// shiftX: 오른쪽 끝에 걸려 창이 앵커보다 왼쪽으로 밀린 px. roomAbove/roomBelow: 창이 위로/아래로 자랄 수 있는 높이.
+// down: 화면 위쪽 절반이라 창이 위 끝을 고정하고 아래로 자란다(body.down → 얼굴·이름표가 위, 말풍선·표지판·쪽지가 그 아래). footY: 창 위 끝 → 발밑
 let room = null;
+const reach = (r) => r?.roomBelow ?? r?.roomAbove; // 창이 자랄 수 있는 높이(방향 무관)
 let fitW = 0; // 마지막으로 보낸 내용물 폭
 
 // 펼친 말풍선의 마크다운(mini-model mdBlocks 토큰) → DOM. 응답 글은 믿지 않으므로 createElement·textContent로만 짓는다.
@@ -177,13 +179,13 @@ function update(cell, d, now) {
   if (open) {
     bubble.dataset.open = "";
     cell.dataset.open = "";
-    // 창이 위로 자랄 수 있는 높이(메인의 roomAbove: 작업 영역 위 끝·60% 상한 중 작은 쪽)에서 말풍선 밖의 높이(얼굴·이름표·여백)를 잰 만큼 뺀다.
-    // 화면 위쪽에 둔 캐릭터도 이름표가 창 안에 남는다. 첫 응답 전에는 화면 60%로 대신. 100vh는 지금 창 높이라 쓸 수 없다
+    // 창이 자랄 수 있는 높이(메인의 roomAbove/roomBelow: 작업 영역 끝·60% 상한 중 작은 쪽)에서 말풍선 밖의 높이(얼굴·이름표·여백)를 잰 만큼 뺀다.
+    // 화면 끝 가까이 둔 캐릭터도 이름표가 창 안에 남는다. 첫 응답 전에는 화면 60%로 대신. 100vh는 지금 창 높이라 쓸 수 없다
     const rest =
       cell.getBoundingClientRect().height -
       bubble.getBoundingClientRect().height;
-    const above = room?.roomAbove ?? Math.floor(screen.availHeight * 0.6);
-    bubble.style.maxHeight = `${Math.max(0, above - Math.ceil(rest) - 1)}px`;
+    const limit = reach(room) ?? Math.floor(screen.availHeight * 0.6);
+    bubble.style.maxHeight = `${Math.max(0, limit - Math.ceil(rest) - 1)}px`;
   } else {
     delete bubble.dataset.open;
     delete cell.dataset.open;
@@ -211,11 +213,16 @@ function sendFit() {
   const right = Math.max(...[...cell.children].map(rightOf));
   const w = Math.ceil(right > cell.clientWidth ? right + 10 : r.width);
   const h = Math.ceil(r.height);
-  const key = `${w}x${h}|${top}`;
+  // 얼굴 위 끝 ~ 이름표 아래 끝 + 칸 위 padding 8 + 발밑 여백 5 = 아래로 자랄 때 창 위 끝에서 발밑까지(메인 fitBounds의 base).
+  // 레이아웃 값이라 등장·끌기 transform에 안 흔들리고, 방향(body.down)과 무관하다(얼굴 바로 밑이 이름표)
+  const face = cell.querySelector(".face");
+  const name = cell.querySelector(".name");
+  const base = name.offsetTop + name.offsetHeight - face.offsetTop + 13;
+  const key = `${w}x${h}|${top}|${base}`;
   if (key === lastFit) return;
   lastFit = key;
   fitW = w;
-  window.agentOffice?.fit(w, h, { top }).then((rm) => setRoom(rm, w));
+  window.agentOffice?.fit(w, h, { top, base }).then((rm) => setRoom(rm, w));
 }
 
 // 오른쪽 끝에 걸려 창이 shiftX만큼 왼쪽으로 밀렸으면 칸의 자식을 그만큼 오른쪽으로 옮긴다(translate) → 캐릭터는 화면 제자리.
@@ -233,11 +240,13 @@ function applyShift() {
     if (c.style.translate !== v) c.style.translate = v;
   }
 }
-// 메인의 응답(fit·drag) 또는 알림(onRoom)을 받는다. 위로 자랄 높이가 바뀌었으면 펼친 말풍선 상한을 다시 잡는다
+// 메인의 응답(fit·drag) 또는 알림(onRoom)을 받는다. 자라는 방향을 body.down으로 따르고(끌어서 중간선을 넘기면 바로 뒤집힌다),
+// 자랄 높이가 바뀌었으면 펼친 말풍선 상한을 다시 잡는다
 function setRoom(r, w) {
   if (!r) return; // false: 메인이 이 창을 모른다
-  const reflow = expanded != null && r.roomAbove !== room?.roomAbove;
+  const reflow = expanded != null && reach(r) !== reach(room);
   room = { ...r, w };
+  document.body.classList.toggle("down", !!r.down);
   if (reflow) render();
   else applyShift();
 }
@@ -344,10 +353,11 @@ if (pet) {
     (e) => e.target.closest?.("a") || setPeek(false),
     true,
   );
-  // 얼굴·이름표 끌기. 창이 오른쪽 끝에 걸려 밀린 상태(shiftX)에서 잡아도 앵커 기준으로 바꿔 튀지 않는다
+  // 얼굴·이름표 끌기. 창이 오른쪽 끝에 걸려 밀린 상태(shiftX)나 아래로 자라는 창(footY)에서 잡아도 앵커 기준으로 바꿔 튀지 않는다
   draggable({
     canStart: (e) => grabbable(e.target),
     shiftX: () => room?.shiftX ?? 0,
+    footY: () => room?.footY ?? innerHeight,
     onStart: () => cellOf()?.classList.add("dragging"), // 들림 + 둥둥 정지 + 그림자 옅게
     onEnd: () => cellOf()?.classList.remove("dragging"),
     onRoom: (r) => setRoom(r, fitW),

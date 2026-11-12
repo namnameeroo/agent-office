@@ -10,6 +10,8 @@ import { visibleDesks } from "../public/mini-model.mjs";
 import {
   PET_W,
   PET_H,
+  BASE_H,
+  growsDown,
   spotFor,
   fitBounds,
   fitRoom,
@@ -101,17 +103,19 @@ const senderPet = (e) =>
   [...pets.values()].find((p) => p.win.webContents === e.sender) ?? null;
 
 // 창을 앵커와 렌더러가 마지막으로 잰 내용물 크기(size)에 맞춘다. 렌더러가 캐릭터를 화면 제자리에 두도록
-// { shiftX, roomAbove }(pets.mjs fitRoom)를 돌려준다. 허브는 캐릭터 최소 크기(80×70)에 묶지 않는다(투명 여백이 클릭을 먹지 않게)
+// pets.mjs fitRoom 값({ shiftX, roomAbove } 또는 아래로 자라면 { shiftX, down, roomBelow, footY })을 돌려준다.
+// 캐릭터가 화면 위쪽 절반이면 아래로 자란다(base = 렌더러가 잰 얼굴·이름표 칸, 첫 응답 전엔 BASE_H). 허브는 늘 위로, 캐릭터 최소 크기(80×70)에도 안 묶는다(투명 여백이 클릭을 먹지 않게)
 function place(p) {
   const wa = areaAt(p.anchor);
-  const min = p.pid === HUB ? { w: 0, h: 0 } : undefined;
-  const r = fitBounds(p.anchor, p.size.w, p.size.h, wa, min);
+  const hub = p.pid === HUB;
+  const base = !hub && growsDown(p.anchor, wa) ? (p.size.base ?? BASE_H) : undefined;
+  const r = fitBounds(p.anchor, p.size.w, p.size.h, wa, hub ? { w: 0, h: 0 } : undefined, base);
   p.win.setBounds(r);
-  return fitRoom(p.anchor, r, wa);
+  return fitRoom(p.anchor, r, wa, base != null);
 }
-// 앵커를 옮긴다(그 지점에서 가장 가까운 화면의 작업 영역 안으로). 캐릭터 창의 오른쪽 한계는 접힌 창 폭(clampTo 기본), 허브는 PET_W
+// 앵커를 옮긴다(그 지점에서 가장 가까운 화면의 작업 영역 안으로). 캐릭터 창의 한계는 clampTo 기본(오른쪽 접힌 창 폭·위 정렬 첫 줄), 허브는 따로
 function moveTo(p, anchor) {
-  p.anchor = clampTo(areaAt(anchor), anchor, p.pid === HUB ? PET_W : undefined);
+  p.anchor = clampTo(areaAt(anchor), anchor, p.pid === HUB);
   return place(p);
 }
 // 메인이 스스로 옮길 때(정렬·디스플레이 변경)는 렌더러가 묻지 않았으므로 같은 값을 보낸다
@@ -166,7 +170,7 @@ function createHub() {
   const wa = primaryArea();
   const saved = positions[HUB];
   const anchor = saved
-    ? clampTo(areaAt(saved), saved, PET_W)
+    ? clampTo(areaAt(saved), saved, true)
     : { x: wa.x + wa.width - 24 - 100, y: wa.y + wa.height - PET_H }; // 기본: 바닥 오른쪽
   const win = openWindow("/mini?hub=1", {
     x: anchor.x,
@@ -235,19 +239,20 @@ const toggleMini = () => (miniOn ? showOffice() : showMini());
 
 ipcMain.handle("office:open", () => showOffice());
 ipcMain.handle("mini:open", () => showMini());
-// 내용물 크기에 창을 맞춘다. 말풍선이 생기면 이웃 창에 가리지 않게 맨 위로. → { shiftX, roomAbove } | false
+// 내용물 크기에 창을 맞춘다. 말풍선이 생기면 이웃 창에 가리지 않게 맨 위로. opts.base: 얼굴·이름표 칸 높이(아래로 자랄 때 창 위 끝 → 발밑).
+// → fitRoom 값 | false
 ipcMain.handle("pet:fit", (e, w, h, opts) => {
   const p = senderPet(e);
   if (!p || !Number.isFinite(w) || !Number.isFinite(h)) return false;
-  p.size = { w, h };
+  p.size = { w, h, base: Number.isFinite(opts?.base) ? opts.base : undefined };
   const room = place(p);
   if (opts?.top) p.win.moveTop();
   if (process.env.AGENT_OFFICE_DEBUG)
     console.log("[fit]", p.pid, w, h, opts, JSON.stringify(p.win.getBounds()));
   return room;
 });
-// 끌기: 렌더러가 앵커(창의 왼쪽 아래 모서리, bottom)를 요청한다. 끌던 중 창 높이가 바뀌어도(말풍선) 앵커가 흔들리지 않는다.
-// 끌려가는 지점의 화면을 따른다(보조 모니터). → fit과 같은 { shiftX, roomAbove } | false
+// 끌기: 렌더러가 앵커(왼쪽 x, 발밑 bottom = 앵커 y + PET_H)를 요청한다. 끌던 중 창 높이·자라는 방향이 바뀌어도(말풍선, 중간선) 앵커가 흔들리지 않는다.
+// 끌려가는 지점의 화면을 따른다(보조 모니터). → fit과 같은 fitRoom 값 | false
 ipcMain.handle("pet:drag", (e, x, bottom) => {
   const p = senderPet(e);
   if (process.env.AGENT_OFFICE_DEBUG) console.log("[drag]", !!p, x, bottom);
@@ -261,12 +266,12 @@ ipcMain.handle("pet:drag-end", (e) => {
   savePositions();
   return true;
 });
-// 허브: 캐릭터 자동 정렬 — 보이는 순서(기다림→작업→휴식)대로 바닥 왼쪽부터 한 줄, 저장된 위치를 덮어쓴다
-function arrangePets() {
+// 허브: 캐릭터 자동 정렬 — 보이는 순서(기다림→작업→휴식)대로 바닥(side "top"이면 위) 왼쪽부터 한 줄, 저장된 위치를 덮어쓴다
+function arrangePets(side) {
   const order = visibleDesks(lastDesks, Date.now())
     .map((d) => d.pid)
     .filter((pid) => pets.has(pid));
-  const spots = arrangeAll(order, primaryArea());
+  const spots = arrangeAll(order, primaryArea(), side);
   for (const pid of order) {
     const q = pets.get(pid);
     relocate(q, spots[pid]);
@@ -275,10 +280,11 @@ function arrangePets() {
   savePositions();
   return order.length;
 }
-ipcMain.handle("hub:arrange", (e) => {
+// 허브의 정렬 타일 둘(↓ 아래 · ↑ 위). 토글이 아니다: 누를 때마다 그 쪽으로 다시 줄 세운다
+ipcMain.handle("hub:arrange", (e, side) => {
   const p = senderPet(e);
   if (!p || p.pid !== HUB) return false;
-  arrangePets();
+  arrangePets(side === "top" ? "top" : "bottom");
   return true;
 });
 // 허브: 캐릭터 창을 한꺼번에 숨기거나 다시 보인다. 창은 닫지 않으므로 자리·펼친 말풍선이 그대로 돌아온다

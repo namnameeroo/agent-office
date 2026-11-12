@@ -418,6 +418,41 @@ body.pet .peek dd {
   overflow-wrap: anywhere;
 }
 
+/* 화면 위쪽 절반(메인 fitRoom down → mini.mjs가 body.down): 창이 위 끝을 고정하고 아래로 자란다. 위아래를 뒤집어
+   얼굴·이름표가 맨 위, 표지판·말풍선·쪽지·문구가 그 아래. 얼굴은 칸 위 padding 8 바로 밑이고 메인이 창 위 끝을 발밑 - base에 두므로
+   위로 자랄 때와 같은 화면 자리다. 아래 padding은 맨 아래 판의 그림자(아래로 4 + 흐림 10)가 창 안에서 끝나게 */
+body.pet.down #bar,
+body.pet.down #row {
+  align-items: start;
+}
+body.pet.down .cell {
+  grid-template-rows: 44px auto auto auto auto auto; /* 얼굴 · 이름표 · 표지판 · 말풍선 · 쪽지 · 문구 */
+  align-items: start;
+  padding-bottom: 12px;
+}
+body.pet.down .face {
+  grid-row: 1;
+}
+body.pet.down .name {
+  grid-row: 2;
+}
+body.pet.down .sign {
+  grid-row: 3;
+  margin: 3px 0 0 36px;
+}
+body.pet.down .bubble {
+  grid-row: 4;
+  margin: 6px 0 0;
+}
+body.pet.down .peek {
+  grid-row: 5;
+  margin: 6px 0 0;
+}
+body.pet.down .msg {
+  grid-row: 6;
+  margin: 6px 0 0;
+}
+
 /* ── 상호작용 피드백 ── */
 /* 호버: 이름표가 밝은 재질로 바뀌고 긴 제목은 240px까지 펼침(창이 오른쪽으로 자란다) */
 body.pet .cell:hover .name,
@@ -506,7 +541,8 @@ body.pet .cell.offline .sign {
   }
 }
 
-/* ── 본부(허브) 창(/mini?hub=1): 벤토 타일 하나(판 96×60). 타워 52px(26px 맵 ×2) = 큰 사무실, 오른쪽 32×24 아이콘 둘 = 정렬 · 새 터미널.
+/* ── 본부(허브) 창(/mini?hub=1): 벤토 타일 하나(판 168×60). 타워 52px(26px 맵 ×2) = 큰 사무실, 32×24 아이콘 둘 = ↑ 위 정렬 · ↓ 아래 정렬,
+   32×52 세로 타일 = 새 터미널 · 캐릭터 숨김.
    커서: 버튼 위 pointer, 판의 빈 바탕(패딩·간격)만 grab, 끄는 동안(.dragging) 전부 grabbing ── */
 body.hub .hub {
   --label: #1d1d1f;

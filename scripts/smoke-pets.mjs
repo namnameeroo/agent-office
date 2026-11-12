@@ -1,7 +1,7 @@
 // npm run smoke: 개발용 Electron을 빈 포트·임시 userData로 미니 모드에 띄워 캐릭터 창 불변식을 단언한다.
 // 측정은 desktop/debug.mjs(AGENT_OFFICE_SMOKE=1)의 [smoke] 줄. 사용자가 띄운 앱(4545)·저장된 캐릭터 위치는 건드리지 않는다.
 // 종료 코드 0 = 전부 통과(살아 있는 세션이 없으면 캐릭터 단언은 건너뛰고 0), 1 = 실패. [렌더러] 표시는 렌더러가
-// pet:fit의 { shiftX, roomAbove }를 써야 통과하는 단언이다. 첫 캐릭터의 응답은 debug.mjs가 긴 마크다운으로 바꿔 넣는다(실데이터와 무관하게 펼침을 잰다).
+// pet:fit의 fitRoom 값(shiftX, roomAbove/roomBelow, down)을 쓰고 base(얼굴·이름표 칸)를 맞게 재야 통과하는 단언이다. 첫 캐릭터의 응답은 debug.mjs가 긴 마크다운으로 바꿔 넣는다(실데이터와 무관하게 펼침을 잰다).
 // 기본 브라우저 열기·클립보드 쓰기는 smoke 앱 안에서 가로채 기록만 한다(사용자 화면·클립보드를 건드리지 않음)
 import electron from "electron";
 import { spawn } from "node:child_process";
@@ -77,6 +77,9 @@ const cx = (r) => r.l + r.w / 2;
 const bottomOf = (b) => b.y + b.height;
 const nameBottom = (s) => s.name.t + s.name.h;
 const face = (s) => ({ x: s.b.x + cx(s.face), y: s.b.y + s.face.t + s.face.h / 2 }); // 화면 좌표
+// 발밑(화면 y): 이름표 아래 + 5. 자라는 방향과 무관하게 앵커 y + PET_H(70)여야 얼굴·이름표가 같은 화면 자리(중간선을 넘겨도 안 튄다)
+const feet = (s) => s.b.y + nameBottom(s) + 5;
+const feetOk = (s) => !!s.name && near(feet(s), s.anchor.y + 70);
 const inside = (b, wa) =>
   b.x >= wa.x &&
   b.y >= wa.y &&
@@ -120,6 +123,10 @@ else if (ex) {
     `펼침: 얼굴 중심 (${f1(face(a).x)}, ${f1(face(a).y)}) → (${f1(face(z).x)}, ${f1(face(z).y)}) 그대로`,
   );
   check(nameBottom(z) <= z.ih + TOL, `펼침: 이름표 아래 끝 ${f1(nameBottom(z))} ≤ 창 높이 ${z.ih}`);
+  check(
+    feetOk(a) && feetOk(z),
+    `펼침(아래쪽 절반, 위로 자람): 발밑 ${f1(feet(a))}·${f1(feet(z))} = 앵커 y + 70 (${a.anchor.y + 70})`,
+  );
   // 펼친 전문의 마크다운: 요소로 그려지고, 응답 글 속 태그·javascript: 링크는 요소가 되지 않는다
   const md = ex.md;
   check(
@@ -140,14 +147,34 @@ else if (ex) {
   );
 }
 
-// 3) 위쪽 끝 펼침(아래 모서리 = 작업 영역 위 + 160): 창은 메인이 막고, 내용물을 창에 맞추는 건 렌더러(roomAbove)
+// 3) 위쪽 끝 펼침(발밑 = 작업 영역 위 + 160 → 화면 위쪽 절반): 창이 위 끝을 고정하고 아래로 자란다. 말풍선은 얼굴 아래,
+// 창 높이 상한은 메인(roomBelow), 내용물을 창에 맞추는 건 렌더러. 위 끝 = 발밑 - base(렌더러가 잰 얼굴·이름표 칸)
 const top = steps.top;
 if (top) {
-  const z = top.after;
-  console.log(`  info 위쪽 끝 펼침: 창 ${z.b.width}×${z.b.height} @ y ${z.b.y}, 말풍선 높이 ${z.bubble ? f1(z.bubble.h) : "-"}, 작업 영역 위 ${z.wa.y}`);
+  const { before: a, after: z } = top;
+  console.log(`  info 위쪽 끝 펼침: 창 ${a.b.width}×${a.b.height} → ${z.b.width}×${z.b.height} @ y ${a.b.y}→${z.b.y}, 말풍선 높이 ${z.bubble ? f1(z.bubble.h) : "-"}, 작업 영역 위 ${z.wa.y}`);
   check(z.open, `위쪽 끝 ${z.pid}: 말풍선이 펼쳐짐`);
   check(nameBottom(z) <= z.ih + TOL, `위쪽 끝 펼침: 이름표 아래 끝 ${f1(nameBottom(z))} ≤ 창 높이 ${z.ih}`, true);
   check(!z.bubble || z.bubble.t >= -TOL, `위쪽 끝 펼침: 말풍선 위 끝 ${z.bubble ? f1(z.bubble.t) : "-"} ≥ 0(창 안)`, true);
+  check(
+    a.b.y === z.b.y && bottomOf(z.b) > bottomOf(a.b),
+    `위쪽 절반 펼침: 창 위 끝 ${a.b.y}→${z.b.y} 그대로, 아래 끝 ${bottomOf(a.b)}→${bottomOf(z.b)} 아래로`,
+  );
+  check(
+    !!a.face && !!z.face && near(face(a).x, face(z).x) && near(face(a).y, face(z).y),
+    `위쪽 절반 펼침: 얼굴 중심 (${a.face ? `${f1(face(a).x)}, ${f1(face(a).y)}` : "-"}) → (${z.face ? `${f1(face(z).x)}, ${f1(face(z).y)}` : "-"}) 그대로`,
+    true,
+  );
+  check(
+    !!z.bubble && !!z.name && z.bubble.t >= z.name.t + z.name.h - TOL,
+    `위쪽 절반 펼침: 말풍선 위 끝 ${z.bubble ? f1(z.bubble.t) : "-"} ≥ 이름표 아래 끝 ${z.name ? f1(nameBottom(z)) : "-"}(얼굴·이름표 아래)`,
+    true,
+  );
+  check(
+    feetOk(a) && feetOk(z),
+    `위쪽 절반(아래로 자람): 발밑 ${a.name ? f1(feet(a)) : "-"}·${z.name ? f1(feet(z)) : "-"} = 앵커 y + 70 (${a.anchor.y + 70}) — 위로 자랄 때와 같은 자리`,
+    true,
+  );
 }
 
 // 4) 오른쪽 끝에서 창이 넓어져도(쪽지) 캐릭터가 화면 제자리 — 렌더러가 shiftX만큼 캐릭터 열을 옮겨야 한다

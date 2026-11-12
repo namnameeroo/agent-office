@@ -9,6 +9,7 @@ import {
   fitRoom,
   petCenter,
   spotFor,
+  growsDown,
 } from "../desktop/pets.mjs";
 
 const WA = { x: 0, y: 25, width: 1440, height: 875 };
@@ -72,10 +73,11 @@ test("fitBounds: 왼쪽 아래 고정, 오른쪽 끝에서는 왼쪽으로 밀�
 
 test("clampTo: 화면 밖 위치를 안으로. 캐릭터 창 오른쪽 한계 = 접힌 창 폭(SLOT 128), 허브는 PET_W(80)", () => {
   assert.deepEqual(clampTo(WA, { x: -50, y: 5000 }), { x: 0, y: 830 });
-  assert.deepEqual(clampTo(WA, { x: 2000, y: 0 }), { x: 1312, y: 25 }); // 1440 - 128
+  // 위 한계 = 위 정렬 첫 줄(25 + 22): 아래로 자라는 창의 위 끝(발밑 - 92)이 작업 영역 위 끝. 전: 25(위로만 자라던 때)
+  assert.deepEqual(clampTo(WA, { x: 2000, y: 0 }), { x: 1312, y: 47 }); // 1440 - 128
   assert.deepEqual(clampTo(WA, { x: 1340, y: 830 }), { x: 1312, y: 830 }); // 전: 그대로 1340 → 접힌 창이 28 밀림
   assert.deepEqual(clampTo(WA, { x: 1312, y: 830 }), { x: 1312, y: 830 });
-  assert.deepEqual(clampTo(WA, { x: 2000, y: 0 }, 80), { x: 1360, y: 25 }); // 허브
+  assert.deepEqual(clampTo(WA, { x: 2000, y: 0 }, true), { x: 1360, y: 25 }); // 허브: 위로만 자라 위 한계는 작업 영역 위 끝
 });
 
 test("prunePositions: 지금 책상 목록(휴면 포함)에 없는 pid만 지운다", () => {
@@ -303,4 +305,84 @@ test("spotFor: 저장 자리로 다시 만든다. 다른 열린 캐릭터가 그
     anchor: { x: 900, y: -70 },
     fresh: false,
   });
+});
+
+// ── 위 정렬 · 아래로 자라는 창(화면 위쪽 절반). WA2 위 정렬 첫 줄 앵커 y = 38 + 92 - 70 = 60, 중간선 = 38 + 472 = 510 ──
+
+test("growsDown: 캐릭터 중심(앵커 y + 35)이 그 화면 작업 영역의 위쪽 절반이면 아래로 자란다", () => {
+  assert.equal(growsDown({ x: 24, y: 60 }, WA2), true);
+  assert.equal(growsDown({ x: 24, y: 474 }, WA2), true); // 중심 509
+  assert.equal(growsDown({ x: 24, y: 475 }, WA2), false); // 중심 510 = 중간선
+  assert.equal(growsDown({ x: 24, y: 912 }, WA2), false);
+  assert.equal(growsDown({ x: 900, y: -1000 }, UP_R), true); // 위 모니터의 위쪽 절반
+  assert.equal(growsDown({ x: 900, y: -70 }, UP_R), false);
+});
+
+test("arrangeAll(top): 위 첫 줄(앵커 y = 위 끝 + 22 → 접힌 창 위 끝 = 작업 영역 위 끝)부터 128px 간격, 줄이 차면 ROW_H 아래 줄", () => {
+  assert.deepEqual(arrangeAll([3, 1, 2], WA2, "top"), {
+    3: { x: 24, y: 60 },
+    1: { x: 152, y: 60 },
+    2: { x: 280, y: 60 },
+  });
+  // WA2 칸 수 floor((1512 - 24) / 128) = 11 → 12번째는 둘째 줄(아래)
+  const many = arrangeAll(Array.from({ length: 12 }, (_, i) => i + 1), WA2, "top");
+  assert.deepEqual(many[11], { x: 1304, y: 60 });
+  assert.deepEqual(many[12], { x: 24, y: 230 });
+  assert.deepEqual(arrangeAll([1, 2], WA2, "bottom"), arrangeAll([1, 2], WA2)); // 기본은 아래
+});
+
+test("fitBounds(base): 위쪽 절반 — 창 위 끝을 발밑(앵커 y + 70) - base에 고정하고 아래로 자란다. 상한은 작업 영역 60%·아래 끝", () => {
+  const a = { x: 300, y: 60 }; // 발밑 130 → 위 끝 38
+  assert.deepEqual(fitBounds(a, 128, 155, WA2, undefined, 92), { x: 300, y: 38, width: 128, height: 155 });
+  // 길게 펼쳐도 위 끝 그대로, 높이 상한 floor(944 × 0.6) = 566
+  assert.deepEqual(fitBounds(a, 436, 2000, WA2, undefined, 92), { x: 300, y: 38, width: 436, height: 566 });
+  // 중간선 바로 위(발밑 544 → 위 끝 452): 작업 영역 아래 끝(982)까지 530
+  assert.deepEqual(fitBounds({ x: 300, y: 474 }, 128, 2000, WA2, undefined, 92), { x: 300, y: 452, width: 128, height: 530 });
+  // 오른쪽 끝 밀림은 위로 자랄 때와 같다
+  assert.equal(fitBounds({ x: 1400, y: 60 }, 248, 155, WA2, undefined, 92).x, 1264);
+});
+
+test("fitBounds: 같은 앵커에서 위로 자란 창의 아래 끝 = 아래로 자란 창의 위 끝 + base = 발밑 → 중간선을 넘겨도 얼굴·이름표가 안 튄다", () => {
+  for (const a of [{ x: 300, y: 474 }, { x: 300, y: 476 }, { x: 24, y: 300 }]) {
+    const up = fitBounds(a, 128, 155, WA2);
+    const down = fitBounds(a, 128, 155, WA2, undefined, 92);
+    assert.equal(up.y + up.height, a.y + 70);
+    assert.equal(down.y + 92, a.y + 70);
+  }
+});
+
+test("fitRoom(down): roomBelow = 창 위 끝에서 아래로 자랄 수 있는 높이, footY = 창 위 끝에서 발밑까지(끌기 기준점)", () => {
+  const a = { x: 300, y: 60 };
+  const r = fitBounds(a, 128, 155, WA2, undefined, 92);
+  assert.deepEqual(fitRoom(a, r, WA2, true), { shiftX: 0, down: true, roomBelow: 566, footY: 92 });
+  const e = { x: 1400, y: 60 };
+  const w = fitBounds(e, 248, 155, WA2, undefined, 92); // 쪽지
+  assert.deepEqual(fitRoom(e, w, WA2, true), { shiftX: 136, down: true, roomBelow: 566, footY: 92 });
+});
+
+test("placeNew(down): 위 정렬 줄 — 기준 바로 오른쪽, 줄이 차면 ROW_H 아래 줄 왼쪽부터, 세 줄이 차면 위 첫 줄 빈칸 → 겹침", () => {
+  const a = { x: 280, y: 60 };
+  assert.deepEqual(placeNew([a], WA2, a, true), { x: 408, y: 60 });
+  const b = { x: 1300, y: 60 };
+  assert.deepEqual(placeNew([b], WA2, b, true), { x: 24, y: 230 }); // 전: 위로 넘기려다 화면 밖 → 바닥 (24, 912)
+  const row = (y) =>
+    Array.from({ length: 11 }, (_, k) => ({ x: 24 + 128 * k, y }));
+  const last = { x: 1304, y: 60 };
+  assert.deepEqual(placeNew([...row(230), ...row(400), last], WA2, last, true), { x: 24, y: 60 });
+  assert.deepEqual(placeNew([...row(60), ...row(230), ...row(400)], WA2, last, true), { x: 24, y: 60 });
+});
+
+test("spotFor: 캐릭터가 화면 위쪽 절반에 모여 있으면(위 정렬) 그 화면의 가장 높은 줄 기준, 줄이 차면 아래 줄", () => {
+  const row = (y, n = 11) =>
+    Array.from({ length: n }, (_, k) => ({ x: 24 + 128 * k, y }));
+  assert.deepEqual(spot({ pets: row(60, 3) }), { anchor: { x: 408, y: 60 }, fresh: true });
+  assert.deepEqual(spot({ pets: row(60) }).anchor, { x: 24, y: 230 }); // 전: 바닥 (24, 912)
+  // 둘째 줄 오른쪽 끝에 끌어 둔 캐릭터가 있어도 기준은 첫 줄 → 넘김은 아래 줄 빈칸. 전: 바닥 (24, 912)
+  assert.deepEqual(spot({ pets: [...row(60), { x: 1304, y: 230 }] }).anchor, { x: 24, y: 230 });
+  // 위쪽 절반 안에서 더 아래 끌어 둔 캐릭터가 있어도 기준 줄은 맨 위 줄. 전: 그 캐릭터 오른쪽 (828, 400)
+  assert.deepEqual(spot({ pets: [...row(60, 3), { x: 700, y: 400 }] }).anchor, { x: 408, y: 60 });
+  // 다른 화면(위 모니터 위쪽 절반)의 캐릭터는 기준 후보가 아니다
+  assert.deepEqual(spot({ pets: [...row(60, 3), { x: 900, y: -1000 }] }).anchor, { x: 408, y: 60 });
+  // 하나라도 아래쪽 절반에 있으면 지금 그대로: 가장 낮은 줄 기준
+  assert.deepEqual(spot({ pets: [...row(60, 3), { x: 24, y: 912 }] }).anchor, { x: 152, y: 912 });
 });
