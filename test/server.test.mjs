@@ -117,7 +117,8 @@ test("GET /api/state?pid=N: desks는 그 pid 하나(없으면 빈 배열), 나�
   }
 });
 
-test("POST /api/focus: 백그라운드 세션은 터미널을 찾지 않고 claude attach 안내(대화형은 실제로 터미널을 움직여서 여기서 부르지 않는다)", async () => {
+// 복사·앱 열기 경로는 test/focus.test.mjs attachHelp(가짜 실행기)로 본다. 여기서는 실제 클립보드·앱을 건드리지 않는 jobId 없는 bg만
+test("POST /api/focus: 백그라운드 세션은 터미널을 찾지 않는다 — jobId가 없으면 아무것도 실행하지 않고 안내(대화형은 실제로 터미널을 움직여서 여기서 부르지 않는다)", async () => {
   const claudeDir = mkdtempSync(join(tmpdir(), "ao-claude-"));
   mkdirSync(join(claudeDir, "sessions"));
   writeFileSync(
@@ -127,7 +128,6 @@ test("POST /api/focus: 백그라운드 세션은 터미널을 찾지 않고 clau
       sessionId: "sbg",
       cwd: claudeDir,
       kind: "bg",
-      jobId: "29c7856c",
       status: "idle",
       statusUpdatedAt: Date.now(),
     }),
@@ -144,7 +144,7 @@ test("POST /api/focus: 백그라운드 세션은 터미널을 찾지 않고 clau
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), {
       ok: false,
-      reason: "백그라운드 세션이다. 터미널에서 claude attach 29c7856c",
+      reason: "백그라운드 세션이라 붙은 터미널이 없다",
     });
   } finally {
     child.kill();

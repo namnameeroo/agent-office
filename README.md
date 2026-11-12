@@ -92,7 +92,7 @@ node --test
 - 서버가 1초마다 스스로 사무실을 수집한다. 탭을 닫아 둬도 상태 변화 로그와 퇴근 기록이 쌓인다. `GET /api/state`는 마지막 수집 결과 `{ generatedAt, counts, desks, gone, events, lastEventAt }`를 준다.
 - 로그와 퇴근 기록은 서버 메모리에 2시간 둔다. 서버를 재시작하면 사라진다.
 - 팀장 상태는 `~/.claude/sessions/<pid>.json`의 `status`·`waitingFor`로 판정한다. 공식 문서에 없는 내부 파일이라 Claude Code 업데이트로 깨질 수 있다. → [ADR 0001](docs/adr/0001-read-status-from-sessions-files.md)
-- 대화형 터미널과 백그라운드 세션(`claude agents`·`--bg`·`/bg`, `kind: "bg"`)을 읽는다. 백그라운드 세션의 칠판을 누르면 터미널로 옮기지 않고 `claude attach <jobId>`를 4초 안내한다. 쉰 시각은 대화 기록의 마지막 시각으로 잰다. → [ADR 0007](docs/adr/0007-background-sessions.md)
+- 대화형 터미널과 백그라운드 세션(`claude agents`·`--bg`·`/bg`, `kind: "bg"`)을 읽는다. 백그라운드 세션의 칠판을 누르면 `claude attach <jobId>`를 클립보드에 복사하고 그 세션을 띄운 터미널 앱만 앞으로 가져온다(탭은 고르지 않는다. 새 탭에서 ⌘V). 쉰 시각은 대화 기록의 마지막 시각으로 잰다. → [ADR 0007](docs/adr/0007-background-sessions.md)
 - 말풍선·팀원·구역·링크 칩은 세션 기록(jsonl)과 git 레포 위치로 계산한다. 링크 칩은 그 세션이 `gh pr create`로 만든 PR, Artifact 도구 결과, Jira 도구로 다룬 티켓만 쓴다(스펙 §4).
 - 화면은 1초마다 `/api/state`를 폴링하고, DOM은 key로 노드를 재사용해 갱신한다. 그래서 갱신 중에도 클릭·포커스·스크롤·텍스트 선택이 유지된다. 건물 움직임은 canvas에 8fps로 칠한다.
 - `POST /api/focus { pid }`는 그 세션의 터미널을 앞으로 가져온다. 결과는 `{ ok, app, partial? }` 또는 `{ ok: false, reason }`이고, 실패·일부만이면 화면 위에 이유를 4초 띄운다.
@@ -101,7 +101,7 @@ node --test
 ## 안전 원칙
 
 - 읽기 전용이다. `~/.claude` 아래에 쓰지 않고 훅이나 설정도 바꾸지 않는다.
-- 화면 밖을 움직이는 것은 두 가지다. 터미널 포커스(`/api/focus`)는 같은 화면(Origin 일치)의 POST만, 지금 수집한 세션 pid만 받고, 명령은 셸 없이 고정 인자로 실행한다(ADR 0003). 데스크탑 앱 허브의 "새 터미널"은 Ghostty를 앞으로 가져와 System Events로 ⌘N을 보낸다(손쉬운 사용 권한 필요). 세션에 글자를 입력하지는 않는다.
+- 화면 밖을 움직이는 것은 세 가지다. 백그라운드 세션의 칠판은 `claude attach <jobId>`를 클립보드에 쓰고(pbcopy) 터미널 앱만 앞으로 가져온다(ADR 0007). 터미널 포커스(`/api/focus`)는 같은 화면(Origin 일치)의 POST만, 지금 수집한 세션 pid만 받고, 명령은 셸 없이 고정 인자로 실행한다(ADR 0003). 데스크탑 앱 허브의 "새 터미널"은 Ghostty를 앞으로 가져와 System Events로 ⌘N을 보낸다(손쉬운 사용 권한 필요). 세션에 글자를 입력하지는 않는다.
 - `127.0.0.1`에만 바인딩하고, Host 헤더를 검사해 DNS 리바인딩을 막는다. 인증은 없으므로 같은 Mac의 다른 사용자 계정은 이 포트로 세션 내용을 읽을 수 있다. 여러 사람이 쓰는 Mac에서는 켜 두지 않는다.
 - 외부 요청, 분석 도구, CDN을 쓰지 않는다. HTML 응답에 `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`을 붙여 브라우저가 이를 강제한다.
 - 데스크탑 앱 창은 자기 서버 origin 밖으로 이동하지 않고, 링크는 `http(s)`만 기본 브라우저로 넘긴다. 4545를 다른 프로그램이 쥐고 있으면 그 서버를 쓰지 않는다.

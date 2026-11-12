@@ -66,3 +66,53 @@ test("pickGhostty: 같은 폴더에서 제목(앞 상태 기호 뗀 것)이 같�
   assert.equal(pickGhostty(terms, { cwd: "/z", title: "x" }), null);
   assert.equal(pickGhostty(terms, { cwd: "/c", title: null }), "D");
 });
+
+import { attachHelp } from "../lib/focus.mjs";
+
+test("attachHelp(bg 세션): 다시 붙는 명령을 클립보드에(pbcopy), 세션을 띄운 터미널 앱만 앞으로 — 탭은 고르지 않는다", async () => {
+  const calls = [];
+  const fake = (envLine, fail = {}) => async (cmd, args, input) => {
+    calls.push([cmd, ...args, ...(input === undefined ? [] : [`<${input}`])]);
+    if (fail[cmd]) return { err: new Error("x"), out: "" };
+    return { err: null, out: cmd === "ps" ? envLine : "" };
+  };
+  const desk = { pid: 7, jobId: "29c7856c" };
+  // supervisor를 Orca에서 띄웠으면 Orca 앱만(orca terminal switch로 탭을 고르지 않는다 — 그 탭은 엉뚱한 탭)
+  assert.deepEqual(await attachHelp(desk, fake(`claude ORCA_TERMINAL_HANDLE=${H}`)), {
+    ok: true,
+    app: "Orca",
+    partial: "복사함: claude attach 29c7856c · Orca에서 새 탭을 열고 붙여넣기(⌘V)",
+  });
+  assert.deepEqual(calls, [
+    ["pbcopy", "<claude attach 29c7856c"],
+    ["ps", "eww", "-o", "command=", "-p", "7"],
+    ["open", "-b", "com.stablyai.orca"],
+  ]);
+  calls.length = 0;
+  assert.equal((await attachHelp(desk, fake("claude TERM_PROGRAM=ghostty"))).app, "Ghostty");
+  assert.deepEqual(calls.at(-1), ["open", "-b", "com.mitchellh.ghostty"]);
+  // 어느 앱인지 모르면 열지 않고 안내만
+  calls.length = 0;
+  assert.deepEqual(await attachHelp(desk, fake("claude")), {
+    ok: true,
+    partial: "복사함: claude attach 29c7856c · 터미널을 열고 붙여넣기(⌘V)",
+  });
+  assert.equal(calls.some(([c]) => c === "open"), false);
+  // 앱 열기 실패도 같은 안내
+  assert.equal(
+    (await attachHelp(desk, fake("claude TERM_PROGRAM=ghostty", { open: true }))).partial,
+    "복사함: claude attach 29c7856c · 터미널을 열고 붙여넣기(⌘V)",
+  );
+  // 복사 실패: 명령을 직접 치도록
+  assert.equal(
+    (await attachHelp(desk, fake("claude TERM_PROGRAM=ghostty", { pbcopy: true }))).partial,
+    "복사하지 못했다: claude attach 29c7856c · Ghostty에서 새 탭을 열고 직접 입력",
+  );
+  // jobId 없음 → 아무것도 실행하지 않는다
+  calls.length = 0;
+  assert.deepEqual(await attachHelp({ pid: 7, jobId: null }, fake("")), {
+    ok: false,
+    reason: "백그라운드 세션이라 붙은 터미널이 없다",
+  });
+  assert.deepEqual(calls, []);
+});
