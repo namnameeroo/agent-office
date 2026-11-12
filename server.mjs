@@ -23,7 +23,8 @@ function configJiraBase() {
   const dir =
     process.env.AGENT_OFFICE_HOME || join(homedir(), ".config", "agent-office");
   try {
-    return JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).jiraBase ?? "";
+    const base = JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).jiraBase;
+    return typeof base === "string" ? base : ""; // 숫자 등이 들어오면 링크 추출이 세션 요약째 실패한다
   } catch {
     return ""; // 파일 없음·깨짐 = 설정 안 함
   }
@@ -120,9 +121,10 @@ const server = createServer((req, res) => {
     } catch {
       return send(404, "text/plain; charset=utf-8", "not found");
     }
-    // 외부 요청 금지를 브라우저가 강제한다. 그래서 인라인 <script>·<style>을 쓰지 않는다
+    // 외부 요청 금지를 브라우저가 강제한다. 그래서 인라인 <script>·<style>을 쓰지 않는다.
+    // frame-ancestors: 다른 페이지가 이 화면을 iframe에 투명하게 깔아 클릭을 유도하지 못하게(default-src가 대신하지 않는다)
     const csp = file.type.startsWith("text/html")
-      ? { "Content-Security-Policy": "default-src 'self'" }
+      ? { "Content-Security-Policy": "default-src 'self'; frame-ancestors 'none'" }
       : {};
     return send(200, file.type, body, csp);
   }

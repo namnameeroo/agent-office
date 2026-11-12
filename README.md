@@ -42,7 +42,7 @@ node server.mjs
 - 데스크탑 앱으로 띄우려면(처음 한 번 `npm install` — Electron은 이때만 쓰는 개발 의존성이다):
 
   ```sh
-  npm run desktop   # 창 하나로 뜬다. 서버는 앱 안에서 같이 돈다. 4545가 이미 쓰이면 떠 있는 서버를 그대로 쓴다
+  npm run desktop   # 창 하나로 뜬다. 서버는 앱 안에서 같이 돈다. 4545가 이미 쓰이면 빈 포트에 앱 전용 서버를 띄운다
   npm run dist      # dist/Agent Office-darwin-arm64/Agent Office.app
   ```
 
@@ -94,9 +94,10 @@ node --test
 ## 안전 원칙
 
 - 읽기 전용이다. `~/.claude` 아래에 쓰지 않고 훅이나 설정도 바꾸지 않는다.
-- 화면 밖을 움직이는 것은 터미널 포커스(`/api/focus`) 하나다. 입력은 보내지 않고, 같은 화면(Origin 일치)의 POST만, 지금 수집한 세션 pid만 받는다. 명령은 셸 없이 고정 인자로 실행한다(ADR 0003).
-- `127.0.0.1`에만 바인딩하고, Host 헤더를 검사해 DNS 리바인딩을 막는다.
-- 외부 요청, 분석 도구, CDN을 쓰지 않는다. HTML 응답에 `Content-Security-Policy: default-src 'self'`를 붙여 브라우저가 이를 강제한다.
+- 화면 밖을 움직이는 것은 두 가지다. 터미널 포커스(`/api/focus`)는 같은 화면(Origin 일치)의 POST만, 지금 수집한 세션 pid만 받고, 명령은 셸 없이 고정 인자로 실행한다(ADR 0003). 데스크탑 앱 허브의 "새 터미널"은 Ghostty를 앞으로 가져와 System Events로 ⌘N을 보낸다(손쉬운 사용 권한 필요). 세션에 글자를 입력하지는 않는다.
+- `127.0.0.1`에만 바인딩하고, Host 헤더를 검사해 DNS 리바인딩을 막는다. 인증은 없으므로 같은 Mac의 다른 사용자 계정은 이 포트로 세션 내용을 읽을 수 있다. 여러 사람이 쓰는 Mac에서는 켜 두지 않는다.
+- 외부 요청, 분석 도구, CDN을 쓰지 않는다. HTML 응답에 `Content-Security-Policy: default-src 'self'; frame-ancestors 'none'`을 붙여 브라우저가 이를 강제한다.
+- 데스크탑 앱 창은 자기 서버 origin 밖으로 이동하지 않고, 링크는 `http(s)`만 기본 브라우저로 넘긴다. 4545를 다른 프로그램이 쥐고 있으면 그 서버를 쓰지 않는다.
 
 ## 구조
 
@@ -104,7 +105,7 @@ node --test
 | --- | --- |
 | `server.mjs` | HTTP 서버. 1초마다 수집, `GET /api/state`, `POST /api/focus`, 정적 파일(`public/`), CSP |
 | `desktop/main.mjs` | Electron 껍데기. 서버를 앱 안에서 띄우고 창에 연다. 창 만들기(`openWindow`)는 서버 기동과 분리돼 있어 미니 모드 창을 더할 수 있다 |
-| `desktop/preload.cjs` | 렌더러가 메인에 시킬 수 있는 세 가지(`agentOffice.openOffice·openMini·resize`) |
+| `desktop/preload.cjs` | 렌더러가 메인에 시킬 수 있는 것(`agentOffice.openOffice·openMini·fit·dragTo·dragEnd·onRoom·menu·arrange·newTerminal·togglePets`) |
 | `desktop/pets.mjs` | 캐릭터 창 기하(빈 칸 배치·크기 맞춤·화면 안 자르기). 순수 함수 |
 | `public/hub.mjs` | 본부(허브) 창: 픽셀 타워 엠블럼 + 사무실·정렬·새 터미널 바로가기(플로팅 모드) |
 | `lib/focus.mjs` | 세션 pid → 터미널(Orca·Ghostty·앱) 판별과 포커스 이동 |

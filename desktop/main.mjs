@@ -3,6 +3,7 @@
 import { app, BrowserWindow, Menu, ipcMain, screen, shell } from "electron";
 import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { visibleDesks } from "../public/mini-model.mjs";
@@ -31,12 +32,25 @@ process.env.PATH = [
   process.env.PATH,
 ].join(":");
 
+// 4545를 이미 다른 프로그램(옛 버전 서버, 같은 Mac의 다른 계정 프로그램 포함)이 쥐고 있으면 그 서버를 믿지 않는다.
+// 그 화면이 preload 브리지가 있는 창에 실리기 때문이다. 대신 빈 포트에 앱 전용 서버를 띄운다. PORT를 주면 그 값 그대로
+if (!process.env.PORT && !(await tryPort(4545)))
+  process.env.PORT = String(await tryPort(0));
 const { ready, address } = await import("../server.mjs");
-const serverUp = ready.catch((e) => {
-  // 이미 node server.mjs가 떠 있으면 그 서버를 그대로 쓴다(같은 앱, 같은 데이터)
-  if (e.code !== "EADDRINUSE") throw e;
-  console.log(`포트가 쓰이는 중: 떠 있는 서버 ${address}를 쓴다`);
-});
+const serverUp = ready;
+const ORIGIN = new URL(address).origin;
+
+// 그 포트에 잠깐 열어 보고 닫는다. 열리면 실제 포트 번호, 이미 쓰이면 0
+function tryPort(port) {
+  return new Promise((resolve) => {
+    const s = createServer();
+    s.once("error", () => resolve(0));
+    s.listen(port, "127.0.0.1", () => {
+      const { port: p } = s.address();
+      s.close(() => resolve(p));
+    });
+  });
+}
 
 const PRELOAD = fileURLToPath(new URL("./preload.cjs", import.meta.url));
 
@@ -53,8 +67,9 @@ function openWindow(path, options = {}) {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: "deny" };
   });
+  // 접두사 비교는 http://127.0.0.1:4545@evil.example/ 이나 :45450을 통과시킨다. 파싱한 origin을 정확히 비교한다
   win.webContents.on("will-navigate", (e, url) => {
-    if (!url.startsWith(address)) e.preventDefault();
+    if (!(URL.canParse(url) && new URL(url).origin === ORIGIN)) e.preventDefault();
   });
   win.loadURL(address + path);
   return win;

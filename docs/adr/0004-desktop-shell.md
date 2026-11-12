@@ -12,9 +12,9 @@ date: 2026-11-09
 | 런타임 | Electron 45 (devDependency). Tauri 제외 | 수집·포커스 로직이 전부 `node:` 내장 모듈이라 Node가 내장된 Electron이면 한 줄도 안 바꾼다. Tauri는 Rust 툴체인과 Node 사이드카가 필요하고 이 PC에 cargo도 없다 |
 | 서버 ↔ 앱 경계 | 메인 프로세스가 HTTP 서버를 **그대로** 띄우고 창은 그 URL을 연다. IPC·preload 없음 | 화면(`public/`)이 이미 `/api/state` 폴링과 `/api/focus` POST로만 서버를 쓴다. 같은 계약을 앱 안에서도 쓰면 브라우저 모드와 데스크탑 모드가 한 코드다. Host·Origin 검사와 CSP도 그대로 적용된다 |
 | 준비 신호 | `server.mjs`가 `ready`(listen 완료 Promise)와 `address`를 export | 창을 열기 전에 서버가 떠 있어야 한다. CLI 실행은 아무도 안 기다려도 되므로 동작이 같다 |
-| 포트 충돌 | `EADDRINUSE`면 떠 있는 서버를 그대로 쓴다 | 플러그인 스킬(`/agent-office on`)이 띄운 서버와 공존해야 한다. 같은 앱·같은 데이터라 창만 열면 된다 |
+| 포트 충돌 | ~~`EADDRINUSE`면 떠 있는 서버를 그대로 쓴다~~ → **2026-11-12 바뀜**: 4545가 쓰이는 중이면 빈 포트에 앱 전용 서버를 띄운다(`PORT`를 주면 그 값) | 떠 있는 서버는 옛 버전(미니 모드 `/mini` 없음)이거나 다른 프로그램일 수 있고, 그 화면이 preload 브리지가 있는 창에 실린다(보안 검토 #2). 플러그인 서버와는 포트만 달리해 공존한다 |
 | 창 생성 분리 | `openWindow(path, options)` 함수 | 미니 모드(투명·항상 위·클릭 통과 창으로 `/?mini` 같은 경로)를 `openWindow` 한 번 더 부르는 걸로 붙이기 위해 |
-| 외부 링크 | `setWindowOpenHandler`로 `http(s)`만 기본 브라우저, 나머지는 거부. `will-navigate`는 서버 주소 밖이면 막는다 | 칩이 `target=_blank`라 앱 안에 창이 또 생기는 걸 막고, 읽기 전용·외부 요청 없음 원칙을 유지 |
+| 외부 링크 | `setWindowOpenHandler`로 `http(s)`만 기본 브라우저, 나머지는 거부. `will-navigate`는 서버 origin과 정확히 같지 않으면 막는다(2026-11-12: 접두사 비교에서 바꿈, `http://127.0.0.1:4545@evil.example/`이 통과하던 문제) | 칩이 `target=_blank`라 앱 안에 창이 또 생기는 걸 막고, 읽기 전용·외부 요청 없음 원칙을 유지 |
 | Dock 배지 | 메인이 2초마다 `/api/state`를 읽어 `counts.waiting` | 서버 내부 상태를 끌어내지 않고 화면과 같은 API를 쓴다. 기존 서버를 쓰는 경우에도 동작 |
 | PATH | 메인 시작 시 Orca CLI·Homebrew 경로를 앞에 붙인다 | Finder에서 띄운 앱은 PATH가 좁아 `orca terminal switch`(ADR 0003)가 ENOENT가 된다 |
 | 패키징 | `@electron/packager`로 `dist/Agent Office-darwin-arm64/Agent Office.app`. 서명·공증·아이콘·자동 업데이트 없음 | 개인 PC에서 쓰는 단계. `dist/`는 gitignore. PF스타더스트 폰트가 로컬에 있으면 .app에 들어가므로 .app을 배포하지 않는다(README 재배포 금지) |
