@@ -155,6 +155,9 @@ function update(cell, d, now) {
   setText(name.querySelector(".where"), whereShort(d));
   const pk = cell.querySelector(".peek");
   const lines = peek && !open ? peekLines(d) : [];
+  // 이름표는 늘어나지 않는다 → 말줄임으로 잘린 제목만 쪽지 첫 줄에 전부 보인다
+  const title = name.querySelector(".title");
+  if (lines.length && title.scrollWidth > title.clientWidth) lines.unshift(["제목", d.title]);
   const lsig = JSON.stringify(lines);
   if (pk.dataset.sig !== lsig) {
     pk.dataset.sig = lsig;
@@ -198,7 +201,7 @@ function update(cell, d, now) {
 const rightOf = (c) => c.offsetLeft + c.offsetWidth;
 
 // 펫 모드: 창을 캐릭터(말풍선·표지판·문구 포함) 크기에 맞춘다. body는 height:100%라 못 쓰고 .cell을 잰다.
-// 호버로 이름표가 넓어지는 것까지 따라가도록 ResizeObserver가 부른다. 같은 값은 다시 보내지 않는다
+// 호버로 쪽지가 뜨는 것까지 따라가도록 ResizeObserver가 부른다. 같은 값은 다시 보내지 않는다
 let lastFit = "";
 let observed = null;
 function sendFit() {
@@ -207,7 +210,7 @@ function sendFit() {
   const d = desks.find((x) => x.pid === petPid);
   const bubbleShown = !cell.querySelector(".bubble").hidden;
   const top = bubbleShown || expanded != null || d?.state === "waiting" || peek;
-  // 칸 폭은 고정(가운데 축)이고 쪽지·펼친 말풍선·늘어난 이름표는 그 오른쪽으로 넘친다 → 넘칠 땐 가장 오른쪽 끝 + 그림자 여백.
+  // 칸 폭은 고정(가운데 축)이고 쪽지·펼친 말풍선은 그 오른쪽으로 넘친다 → 넘칠 땐 가장 오른쪽 끝 + 그림자 여백.
   // scrollWidth는 옮긴(translate) 열까지 넣어 폭 → shiftX → 폭 되먹임이 생기므로 레이아웃 값으로 잰다
   const r = cell.getBoundingClientRect();
   const right = Math.max(...[...cell.children].map(rightOf));
@@ -226,7 +229,7 @@ function sendFit() {
 }
 
 // 오른쪽 끝에 걸려 창이 shiftX만큼 왼쪽으로 밀렸으면 칸의 자식을 그만큼 오른쪽으로 옮긴다(translate) → 캐릭터는 화면 제자리.
-// 단 그 응답 때의 창 폭(room.w)에서 칸 여백 6을 뺀 곳 밖으로는 안 옮긴다: 쪽지·펼친 말풍선·늘어난 이름표처럼 넓은 것은 덜(4 이하) 옮겨져
+// 단 그 응답 때의 창 폭(room.w)에서 칸 여백 6을 뺀 곳 밖으로는 안 옮긴다: 쪽지·펼친 말풍선처럼 넓은 것은 덜(4 이하) 옮겨져
 // 창 왼쪽부터 놓이고, 열 폭(116) 안의 것은 전부 옮겨져 얼굴 축에 남는다.
 // 얼굴(오른쪽 끝 104)은 늘 shiftX 전부: clampTo가 앵커를 작업 영역 오른쪽 - 128 안에 두므로 창 폭 - shiftX ≥ 128
 function applyShift() {

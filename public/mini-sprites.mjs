@@ -223,7 +223,8 @@ export function avatarSvg({ seed, state, chicks: n = 0, fable = false }) {
   void fable;
   return (
     `<svg viewBox="${bx} ${by} ${bw} ${bh}" width="${bw * 2}" height="${bh * 2}" shape-rendering="crispEdges" aria-hidden="true">` +
-    `<g class="shadow">${R(1, 19, 12, 1, SHADOW)}${n ? R(-9, 17, 6, 1, SHADOW) : ""}</g>` +
+    // 그림자 y 16.5: 머리 아래 끝(12)에서 4.5칸 = 9px. 19에서 5px 올렸다(T55). 노트북 아래 끝(16)과는 1px
+    `<g class="shadow">${R(1, 16.5, 12, 1, SHADOW)}${n ? R(-9, 17, 6, 1, SHADOW) : ""}</g>` +
     `<g class="bob">${g}</g>` +
     (n ? `<g class="chick">${chicks(n)}</g>` : "") +
     `</svg>`

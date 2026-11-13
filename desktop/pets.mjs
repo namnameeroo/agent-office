@@ -7,7 +7,8 @@ export const ROW_H = 170; // 둘째 줄부터 올라가는 높이(두 줄 말풍
 export const MARGIN = 24;
 export const MAX_W = 460;
 // 얼굴·두 줄 이름표 칸(칸 위 padding 8 + 얼굴 44 + 2 + 이름표 33 + 발밑 여백 5, mini.css). 아래로 자라는 창의 위 끝 = 발밑 - base.
-// base는 렌더러가 재서 보낸다(이름표가 한 줄이면 80). 이 값은 첫 응답 전 대신 쓰는 값이자 위 정렬 첫 줄의 기준
+// base는 렌더러가 재서 보낸다. T56부터 이름표가 4px 올라가 실제 값은 88이다(얼굴 44 - 2). 이 값은 첫 응답 전 대신 쓰는 값이자
+// 위 정렬 첫 줄의 기준이라 그대로 둔다 — 위 정렬 첫 줄의 창 위 끝이 작업 영역 위 끝보다 4px 아래일 뿐이다
 export const BASE_H = 92;
 
 const floorY = (wa) => wa.y + wa.height - PET_H;
