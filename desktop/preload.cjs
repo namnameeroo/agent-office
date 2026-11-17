@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("agentOffice", {
   // 창이 앵커보다 왼쪽으로 밀린 px(캐릭터 열을 그만큼 오른쪽으로). roomAbove/roomBelow: 창이 위로/아래로 자랄 수 있는 높이(펼친 말풍선 최대 높이의 기준).
   // down: 화면 위쪽 절반 → 창이 위 끝을 고정하고 아래로 자란다(말풍선이 얼굴 아래). footY: 창 위 끝에서 발밑까지(끌기 기준). opts.base: 얼굴·이름표 칸 높이
   fit: (w, h, opts) => ipcRenderer.invoke("pet:fit", w, h, opts ?? {}),
+  hit: (on) => ipcRenderer.send("pet:hit", !!on), // 포인터가 내용물 위인가 → 아니면 메인이 클릭을 뒤 창으로 통과시킨다
   dragTo: (x, y, alone) => ipcRenderer.invoke("pet:drag", x, y, alone), // alone: ⌥ — 허브 끌기에서 허브만(캐릭터 창에선 무시)
   // 메인이 스스로 창을 옮겼을 때(허브 정렬·디스플레이 변경) 같은 값을 보낸다
   onRoom: (cb) => ipcRenderer.on("pet:room", (_e, room) => cb(room)),

@@ -51,6 +51,7 @@ let offlineSince = null;
 let room = null;
 const reach = (r) => r?.roomBelow ?? r?.roomAbove; // 창이 자랄 수 있는 높이(방향 무관)
 let fitW = 0; // 마지막으로 보낸 내용물 폭
+let hitTest = null; // 펫 모드: 포인터가 내용물 위인지 다시 판정한다(아래 끌기·쪽지 절에서 채운다)
 
 // 펼친 말풍선의 마크다운(mini-model mdBlocks 토큰) → DOM. 응답 글은 믿지 않으므로 createElement·textContent로만 짓는다.
 // 링크는 linkEl(common.mjs): http(s)만 <a target=_blank rel=noopener>, 메인 setWindowOpenHandler가 기본 브라우저로 넘긴다
@@ -249,6 +250,9 @@ function setRoom(r, w) {
   if (!r) return; // false: 메인이 이 창을 모른다
   const reflow = expanded != null && reach(r) !== reach(room);
   room = { ...r, w };
+  // 창은 내용물보다 크다(자랄 수 있는 최대 크기로 고정, pets.mjs holdBounds). offX = 창 왼쪽에서 내용물 자리까지 → 줄째 옮긴다
+  const ox = r.offX ? `${r.offX}px` : "";
+  if (row.style.translate !== ox) row.style.translate = ox;
   document.body.classList.toggle("down", !!r.down);
   if (reflow) render();
   else applyShift();
@@ -277,6 +281,7 @@ function render() {
   }
   sendFit();
   applyShift();
+  hitTest?.(); // 포인터는 그대로인데 내용물이 바뀌었을 수 있다
 }
 
 // 1초마다 자기 세션만(/api/state?pid=N) 받는다. 창이 안 보이는 동안(허브의 숨김 토글 → document.hidden)은 쉬고,
@@ -336,7 +341,7 @@ document.addEventListener("keydown", (e) => {
 if (pet) {
   const grabbable = (t) => t.closest?.(".face, .name");
   const cellOf = () => row.firstElementChild;
-  // 쪽지: 창 = 캐릭터라 창에 들어온 것이 곧 올려둔 것. 스쳐 지나갈 땐 안 뜨게 0.15초, 누르면(끌기·메뉴) 접는다
+  // 쪽지: 내용물에 올려두면 뜬다. 스쳐 지나갈 땐 안 뜨게 0.15초, 누르면(끌기·메뉴) 접는다
   let peekTimer;
   const setPeek = (on) => {
     clearTimeout(peekTimer);
@@ -344,12 +349,34 @@ if (pet) {
     peek = on;
     render();
   };
-  const root = document.documentElement;
-  root.addEventListener("mouseenter", () => {
+  // 창이 내용물보다 커서(T62) "창에 들어옴"이 아니라 내용물 사각형으로 판정한다: 칸 + 오른쪽으로 넘친 쪽지·펼친 말풍선(fitW) =
+  // 창을 내용물에 맞추던 때의 창 사각형. 바뀔 때만 메인에 알린다(밖이면 클릭이 뒤 창으로 통과, 움직임은 계속 받는다)
+  let over = false;
+  let pt = null; // 마지막 포인터 자리(창 기준). 창 밖이면 null
+  hitTest = () => {
+    const r = pt && cellOf()?.getBoundingClientRect();
+    const on =
+      !!r &&
+      pt.x >= r.left &&
+      pt.x < r.left + Math.max(fitW, r.width) &&
+      pt.y >= r.top &&
+      pt.y < r.bottom;
+    if (on === over) return;
+    over = on;
+    window.agentOffice?.hit(on);
     clearTimeout(peekTimer);
-    peekTimer = setTimeout(() => setPeek(true), 150);
+    if (on) peekTimer = setTimeout(() => setPeek(true), 150);
+    else setPeek(false);
+  };
+  document.addEventListener("mousemove", (e) => {
+    pt = { x: e.clientX, y: e.clientY };
+    if (!e.buttons) hitTest(); // 누른 채(끌기)로는 안 바꾼다: 끄는 중에 통과로 바뀌면 창이 마우스를 놓친다
   });
-  root.addEventListener("mouseleave", () => setPeek(false));
+  document.documentElement.addEventListener("mouseleave", (e) => {
+    if (e.buttons) return;
+    pt = null;
+    hitTest();
+  });
   // 쪽지의 링크를 누를 땐 쪽지를 접지 않는다(접으면 클릭이 링크에 닿지 않는다)
   document.addEventListener(
     "mousedown",
@@ -359,7 +386,7 @@ if (pet) {
   // 얼굴·이름표 끌기. 창이 오른쪽 끝에 걸려 밀린 상태(shiftX)나 아래로 자라는 창(footY)에서 잡아도 앵커 기준으로 바꿔 튀지 않는다
   draggable({
     canStart: (e) => grabbable(e.target),
-    shiftX: () => room?.shiftX ?? 0,
+    shiftX: () => (room?.offX ?? 0) + (room?.shiftX ?? 0), // 창 왼쪽 → 앵커
     footY: () => room?.footY ?? innerHeight,
     onStart: () => cellOf()?.classList.add("dragging"), // 들림 + 둥둥 정지 + 그림자 옅게
     onEnd: () => cellOf()?.classList.remove("dragging"),

@@ -10,11 +10,14 @@ body {
   overflow: hidden;
   user-select: none;
 }
-/* 창 바닥에 붙인다: 위(말풍선·쪽지)로 자라도 캐릭터·판은 아래에 남는다 */
+/* 창 바닥에 붙인다: 위(말풍선·쪽지)로 자라도 캐릭터·판은 아래에 남는다.
+   행 트랙을 창 높이에 묶는다(minmax(0, 1fr)): auto면 내용이 창보다 큰 동안(허브처럼 창이 내용을 따라 커지기 전 1~2프레임)
+   트랙이 내용만큼 커져 위에서부터 놓이고, 맨 아래 것이 창 아래로 밀려 사라진다(T62) */
 #bar {
   height: 100%;
   display: grid;
   grid-template-columns: 1fr;
+  grid-template-rows: minmax(0, 1fr);
   align-items: end;
 }
 #row {

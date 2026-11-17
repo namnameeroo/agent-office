@@ -9,6 +9,7 @@ import {
   arrangeByArea,
   carryTo,
   fitRoom,
+  holdBounds,
   petCenter,
   spotFor,
   growsDown,
@@ -421,4 +422,24 @@ test("carryTo: 다른 화면으로 데려가도 그 화면 안 자리를 지킨�
   // 같은 크기 화면이면 화면 위치 차이만큼 평행 이동
   const C = { ...B, x: -1110 };
   assert.deepEqual(carryTo({ x: 834, y: -70 }, B, C), { x: -1086, y: -70 });
+});
+
+test("holdBounds: 창 사각형은 내용물 크기와 무관하고, 어떤 내용물 사각형(fitBounds)도 그 안 — 위로 자라면 아래 끝, 아래로 자라면 위 끝이 같다(T62)", () => {
+  const within = (r, b) =>
+    r.x >= b.x && r.y >= b.y && r.x + r.width <= b.x + b.width && r.y + r.height <= b.y + b.height;
+  const sizes = [[80, 70], [128, 132], [248, 236], [460, 2000]];
+  // 바닥 왼쪽 · 바닥 오른쪽 끝(창이 왼쪽으로 밀린다) · 위쪽 절반(base 88: 아래로 자란다)
+  for (const [a, base] of [[{ x: 24, y: 830 }, undefined], [{ x: 1312, y: 830 }, undefined], [{ x: 24, y: 47 }, 88], [{ x: 1312, y: 47 }, 88]]) {
+    const b = holdBounds(a, WA, base);
+    assert.equal(b.width, 460);
+    for (const [w, h] of sizes) {
+      const r = fitBounds(a, w, h, WA, undefined, base);
+      assert.ok(within(r, b), `${JSON.stringify(r)} ⊄ ${JSON.stringify(b)}`);
+      if (base == null) assert.equal(r.y + r.height, b.y + b.height);
+      else assert.equal(r.y, b.y);
+    }
+  }
+  // 바닥 왼쪽: 발밑 900에서 위로 작업 영역 60%(525), 오른쪽 끝: 창 x = 1440 - 460
+  assert.deepEqual(holdBounds({ x: 24, y: 830 }, WA), { x: 24, y: 375, width: 460, height: 525 });
+  assert.equal(holdBounds({ x: 1312, y: 830 }, WA).x, 980);
 });

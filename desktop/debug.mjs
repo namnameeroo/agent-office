@@ -58,6 +58,49 @@ export function installDebug({
       4500,
     );
   }
+  // 호버(쪽지) 때 창과 내용물이 어긋나는지(T62): 첫 캐릭터를 바닥 왼쪽에 두고 포인터를 얼굴 위로 → 창 밖으로. 렌더러는 프레임마다
+  // 뷰포트 높이·얼굴 위치를, 메인은 setBounds 시각·값을 찍는다([hover] 줄, 시각은 epoch ms). 호버 동안 setBounds가 없어야 한다.
+  // 화면에 실제로 그려진 것은 이걸 돌리는 동안 screencapture -V로 그 영역을 녹화해 프레임 단위로 본다
+  if (process.env.AGENT_OFFICE_TRACE_HOVER) {
+    setTimeout(showMini, 1200);
+    setTimeout(async () => {
+      const p = [...pets.values()].find((q) => q.pid !== HUB);
+      if (!p) {
+        console.log("[hover] no pet");
+        return app.quit();
+      }
+      const wa = screen.getPrimaryDisplay().workArea;
+      relocate(p, { x: wa.x + 24, y: wa.y + wa.height - PET_H });
+      await sleep(800);
+      const set = p.win.setBounds.bind(p.win);
+      p.win.setBounds = (r) => {
+        console.log("[hover] setBounds", Date.now(), JSON.stringify(r));
+        set(r);
+      };
+      const rows = await p.win.webContents.executeJavaScript(`(async () => {
+        const out = []; let last = "", on = true;
+        const tick = () => {
+          const f = document.querySelector(".face").getBoundingClientRect();
+          const row = [innerHeight, screenY, Math.round(f.top), !document.querySelector(".peek").hidden,
+            document.scrollingElement.scrollTop + document.body.scrollTop + document.getElementById("bar").scrollTop + document.getElementById("row").scrollTop];
+          const k = row.join();
+          if (k !== last) { last = k; out.push([Math.round(performance.timeOrigin + performance.now()), ...row, screenY + Math.round(f.top)]); }
+          if (on) requestAnimationFrame(tick);
+        };
+        tick();
+        const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+        ${HOVER};
+        await wait(1000);
+        ${UNHOVER};
+        await wait(700);
+        on = false;
+        return out;
+      })()`);
+      console.log("[hover] t, innerHeight, screenY, faceTop, peek, scroll, faceScreenY");
+      for (const r of rows) console.log("[hover] frame", JSON.stringify(r));
+      app.quit();
+    }, 4500);
+  }
   if (process.env.AGENT_OFFICE_SCREENSHOT_MINI) {
     const at = delay || 4000;
     setTimeout(showMini, 1200);
@@ -201,6 +244,9 @@ async function dragBy(win, x, y, dxs, modifiers = []) {
 }
 // 캐릭터 창 안의 칸 수치(창 기준 CSS px). 숨긴 요소는 null
 const MEASURE = `(()=>{const q=(s)=>{const e=document.querySelector(s);if(!e||e.hidden)return null;const r=e.getBoundingClientRect();return{l:r.left,t:r.top,w:r.width,h:r.height}};const b=document.querySelector(".bubble");return JSON.stringify({iw:innerWidth,ih:innerHeight,face:q(".face"),name:q(".name"),bubble:q(".bubble"),open:!!document.querySelector(".bubble[data-open]"),canOpen:!!b&&!b.hidden&&!("static" in b.dataset)})})()`;
+// 호버: 포인터를 얼굴 가운데로 / 창 밖으로(렌더러는 내용물 사각형으로 판정한다)
+const HOVER = '(() => { const r = document.querySelector(".face").getBoundingClientRect(); document.dispatchEvent(new MouseEvent("mousemove", { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); })()';
+const UNHOVER = 'document.documentElement.dispatchEvent(new MouseEvent("mouseleave"))';
 const BUBBLE = 'document.querySelector(".bubble:not([hidden]):not([data-static])")?.click()';
 
 // 측정 순서: 접힘(전부) → 펼침(바닥 왼쪽, 링크 누름·응답 복사) → 위쪽 끝 펼침 → 오른쪽 끝 쪽지·끌기 시작 → 허브 숨김·보임(폴링 멈춤) → 허브 끌기.
@@ -211,15 +257,25 @@ async function smoke(pets, HUB, relocate, office) {
   const js = (p, code) => p.win.webContents.executeJavaScript(code);
   // 측정 중에 세션이 끝나 창이 닫힐 수 있다(실세션) → 닫힌 창은 건너뛴다
   const all = () => [...pets.values()].filter((p) => !p.win.isDestroyed());
+  // 캐릭터 창은 내용물보다 크다(holdBounds) → b·iw·ih·요소 좌표는 내용물 사각형(p.box, 메인 place) 기준으로 바꿔 싣고,
+  // 실제 창은 win, 창 → 내용물 차이는 off(창 좌표로 입력을 보낼 때 더한다). 허브는 창 = 내용물
   const snap = async (p) => {
-    const b = p.win.getBounds();
+    const win = p.win.getBounds();
+    const b = p.box ?? win;
+    const off = { x: b.x - win.x, y: b.y - win.y };
+    const m = p.pid === HUB ? {} : JSON.parse(await js(p, MEASURE));
+    for (const k of ["face", "name", "bubble"])
+      if (m[k]) m[k] = { ...m[k], l: m[k].l - off.x, t: m[k].t - off.y };
     return {
       pid: p.pid,
       visible: p.win.isVisible(),
       b,
-      wa: screen.getDisplayMatching(b).workArea, // 메인의 선택(areaAt)과 따로: 창이 실제로 걸친 화면
+      win,
+      off,
+      wa: screen.getDisplayMatching(win).workArea, // 메인의 선택(areaAt)과 따로: 창이 실제로 걸친 화면
       anchor: p.anchor,
-      ...(p.pid === HUB ? {} : JSON.parse(await js(p, MEASURE))),
+      ...m,
+      ...(p.box ? { iw: b.width, ih: b.height } : {}),
     };
   };
   const snapAll = () => Promise.all(all().map(snap));
@@ -228,7 +284,10 @@ async function smoke(pets, HUB, relocate, office) {
     await sleep(1000);
   };
   // 지나가는 마우스(쪽지·호버)가 수치를 흔들지 않게. 아래 단계는 DOM 이벤트·click()·sendInputEvent로만 누른다
-  for (const p of all()) p.win.setIgnoreMouseEvents(true);
+  for (const p of all()) {
+    p.win.setIgnoreMouseEvents(true);
+    p.win.setIgnoreMouseEvents = () => {}; // 렌더러의 pet:hit이 다시 켜지 못하게
+  }
   const chars = all().filter((p) => p.pid !== HUB);
   // 상태 요청 세기(전부) + 첫 캐릭터의 응답을 긴 마크다운으로(펼침·위쪽 끝·링크·복사가 실데이터와 무관하게 돈다)
   for (const p of chars) await js(p, SPY);
@@ -290,7 +349,7 @@ async function smoke(pets, HUB, relocate, office) {
     relocate(p, { x: wa.x + wa.width - 112, y: floor });
     await sleep(800);
     const rb = await snap(p);
-    await js(p, 'document.documentElement.dispatchEvent(new MouseEvent("mouseenter"))');
+    await js(p, HOVER);
     await sleep(1000);
     const ra = await snap(p);
     let drag = null;
@@ -298,15 +357,15 @@ async function smoke(pets, HUB, relocate, office) {
       const DX = -30;
       const release = await dragBy(
         p.win,
-        Math.round(ra.face.l + ra.face.w / 2),
-        Math.round(ra.face.t + ra.face.h / 2),
+        Math.round(ra.off.x + ra.face.l + ra.face.w / 2),
+        Math.round(ra.off.y + ra.face.t + ra.face.h / 2),
         [-10, -20, DX],
       );
       drag = { dx: DX, during: await snap(p) };
       release();
       await sleep(500);
     }
-    await js(p, 'document.documentElement.dispatchEvent(new MouseEvent("mouseleave"))');
+    await js(p, UNHOVER);
     await sleep(800);
     log("right", { before: rb, after: ra, drag });
   }
@@ -342,7 +401,7 @@ async function smoke(pets, HUB, relocate, office) {
     const live = chars.filter((p) => !p.win.isDestroyed());
     live.forEach((p, i) => relocate(p, { x: wa.x + 200 + (i % 8) * 128, y: wa.y + wa.height - PET_H }));
     await sleep(600);
-    const xs = () => Object.fromEntries(live.map((p) => [p.pid, p.win.getBounds().x]));
+    const xs = () => Object.fromEntries(live.map((p) => [p.pid, (p.box ?? p.win.getBounds()).x])); // 캐릭터 자리 = 내용물 사각형(창은 오른쪽 끝에서 묶인다, T62)
     const t = JSON.parse(
       await js(hub, 'JSON.stringify((r => ({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }))(document.querySelector("[data-act=office]").getBoundingClientRect()))'),
     );

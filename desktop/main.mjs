@@ -14,6 +14,7 @@ import {
   growsDown,
   spotFor,
   fitBounds,
+  holdBounds,
   fitRoom,
   petCenter,
   clampTo,
@@ -107,7 +108,7 @@ function savePositions() {
 const senderPet = (e) =>
   [...pets.values()].find((p) => p.win.webContents === e.sender) ?? null;
 
-// 창을 앵커와 렌더러가 마지막으로 잰 내용물 크기(size)에 맞춘다. 렌더러가 캐릭터를 화면 제자리에 두도록
+// 앵커와 렌더러가 마지막으로 잰 내용물 크기(size)로 내용물 사각형을 잡는다(허브는 창 = 내용물 사각형, 캐릭터는 아래 주석). 렌더러가 캐릭터를 화면 제자리에 두도록
 // pets.mjs fitRoom 값({ shiftX, roomAbove } 또는 아래로 자라면 { shiftX, down, roomBelow, footY })을 돌려준다.
 // 캐릭터가 화면 위쪽 절반이면 아래로 자란다(base = 렌더러가 잰 얼굴·이름표 칸, 첫 응답 전엔 BASE_H). 허브는 늘 위로, 캐릭터 최소 크기(80×70)에도 안 묶는다(투명 여백이 클릭을 먹지 않게)
 function place(p) {
@@ -115,8 +116,19 @@ function place(p) {
   const hub = p.pid === HUB;
   const base = !hub && growsDown(p.anchor, wa) ? (p.size.base ?? BASE_H) : undefined;
   const r = fitBounds(p.anchor, p.size.w, p.size.h, wa, hub ? { w: 0, h: 0 } : undefined, base);
-  p.win.setBounds(r);
-  return fitRoom(p.anchor, r, wa, base != null);
+  const room = fitRoom(p.anchor, r, wa, base != null);
+  if (hub) {
+    p.win.setBounds(r);
+    return room;
+  }
+  // 캐릭터 창은 내용물 사각형(r)이 아니라 자랄 수 있는 최대 사각형(holdBounds)에 둔다 → 호버·말풍선으로 내용이 바뀌어도 창은 그대로(T62).
+  // r은 창 안의 내용물 자리로만 쓴다: offX = 창 왼쪽에서 r까지(렌더러가 그만큼 옮긴다). 투명한 곳의 클릭은 pet:hit이 통과시킨다
+  p.box = r;
+  const b = holdBounds(p.anchor, wa, base);
+  const now = p.win.getBounds(); // 같으면 건드리지 않는다. 캐시가 아니라 실제 값과 견줘 OS가 옮긴 창도 다음 맞춤에 돌아온다
+  if (now.x !== b.x || now.y !== b.y || now.width !== b.width || now.height !== b.height)
+    p.win.setBounds(b);
+  return { ...room, offX: r.x - b.x };
 }
 // 앵커를 옮긴다(그 지점에서 가장 가까운 화면의 작업 영역 안으로). 캐릭터 창의 한계는 clampTo 기본(오른쪽 접힌 창 폭·위 정렬 첫 줄), 허브는 따로
 function moveTo(p, anchor) {
@@ -164,6 +176,7 @@ function createPet(pid) {
   });
   win.setAlwaysOnTop(true, "floating");
   win.setVisibleOnAllWorkspaces(true, { skipTransformProcessType: true });
+  win.setIgnoreMouseEvents(true, { forward: true }); // 창이 내용물보다 크다: 기본은 통과, 포인터가 내용물 위일 때만 받는다(pet:hit)
   const pet = { win, pid, anchor, size: { w: PET_W, h: PET_H } };
   pets.set(pid, pet);
   return pet;
@@ -281,6 +294,12 @@ ipcMain.handle("pet:fit", (e, w, h, opts) => {
   if (process.env.AGENT_OFFICE_DEBUG)
     console.log("[fit]", p.pid, w, h, opts, JSON.stringify(p.win.getBounds()));
   return room;
+});
+// 포인터가 내용물 위인지(렌더러 판정). 아니면 클릭이 뒤 창으로 통과하고, 움직임만 계속 받아(forward) 다시 판정한다
+ipcMain.on("pet:hit", (e, on) => {
+  const p = senderPet(e);
+  if (p && p.pid !== HUB) p.win.setIgnoreMouseEvents(!on, { forward: true });
+  if (process.env.AGENT_OFFICE_DEBUG) console.log("[hit]", p?.pid, on, Date.now());
 });
 // 끌기: 렌더러가 앵커(왼쪽 x, 발밑 bottom = 앵커 y + PET_H)를 요청한다. 끌던 중 창 높이·자라는 방향이 바뀌어도(말풍선, 중간선) 앵커가 흔들리지 않는다.
 // 끌려가는 지점의 화면을 따른다(보조 모니터). → fit과 같은 fitRoom 값 | false

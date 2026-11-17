@@ -86,6 +86,7 @@ const inside = (b, wa) =>
   b.x + b.width <= wa.x + wa.width &&
   b.y + b.height <= wa.y + wa.height;
 const f1 = (n) => Math.round(n * 10) / 10;
+const same = (a, b) => !!a && !!b && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 const isChar = (s) => s.pid !== "hub";
 
 // 1) 접힘: 얼굴·이름표·말풍선이 한 축, 이름표가 창 안
@@ -123,6 +124,11 @@ else if (ex) {
     `펼침: 얼굴 중심 (${f1(face(a).x)}, ${f1(face(a).y)}) → (${f1(face(z).x)}, ${f1(face(z).y)}) 그대로`,
   );
   check(nameBottom(z) <= z.ih + TOL, `펼침: 이름표 아래 끝 ${f1(nameBottom(z))} ≤ 창 높이 ${z.ih}`);
+  // T62: 실제 창은 자랄 수 있는 최대 크기로 고정 — 내용물이 커져도 창은 그대로여야 캐릭터가 한두 프레임 밀리지 않는다
+  check(
+    !!a.win && same(a.win, z.win) && z.win.height > z.b.height,
+    `펼침: 실제 창 ${JSON.stringify(a.win)} → ${JSON.stringify(z.win)} 그대로(내용물 ${z.b.width}×${z.b.height}보다 크다)`,
+  );
   check(
     feetOk(a) && feetOk(z),
     `펼침(아래쪽 절반, 위로 자람): 발밑 ${f1(feet(a))}·${f1(feet(z))} = 앵커 y + 70 (${a.anchor.y + 70})`,
@@ -170,6 +176,7 @@ if (top) {
     `위쪽 절반 펼침: 말풍선 위 끝 ${z.bubble ? f1(z.bubble.t) : "-"} ≥ 이름표 아래 끝 ${z.name ? f1(nameBottom(z)) : "-"}(얼굴·이름표 아래)`,
     true,
   );
+  check(same(a.win, z.win), `위쪽 절반 펼침: 실제 창 ${JSON.stringify(a.win)} → ${JSON.stringify(z.win)} 그대로`);
   check(
     feetOk(a) && feetOk(z),
     `위쪽 절반(아래로 자람): 발밑 ${a.name ? f1(feet(a)) : "-"}·${z.name ? f1(feet(z)) : "-"} = 앵커 y + 70 (${a.anchor.y + 70}) — 위로 자랄 때와 같은 자리`,
@@ -279,7 +286,7 @@ if (hd) {
 const snaps = Object.values(steps).flatMap((d) =>
   Object.values(d).flatMap((v) => (Array.isArray(v) ? v : v?.b ? [v] : [])),
 );
-const out = snaps.filter((s) => s.visible && !inside(s.b, s.wa));
+const out = snaps.filter((s) => s.visible && !(inside(s.b, s.wa) && inside(s.win ?? s.b, s.wa))); // 내용물 사각형도, 실제 창(캐릭터는 더 크다)도
 check(
   !out.length,
   `창이 작업 영역 안 (측정 ${snaps.length}회${out.length ? `, 벗어남: ${out.map((s) => `${s.pid} ${JSON.stringify(s.b)} ⊄ ${JSON.stringify(s.wa)}`).join(" / ")}` : ""})`,

@@ -112,6 +112,13 @@ export function fitRoom(anchor, r, wa, down = false) {
   };
 }
 
+// 캐릭터 창의 실제 사각형: 내용물(fitBounds)이 그 앵커에서 될 수 있는 가장 큰 크기(폭 MAX_W, 자랄 수 있는 높이 끝까지).
+// 내용이 바뀔 때 창을 다시 재지 않으려는 것이다 — 창 사각형과 새 프레임은 서로 다른 프레임에 화면에 반영되고 그 사이 내용은
+// 창 왼쪽 위 기준으로 그려져, 위로 자라는 창(위 끝이 움직인다)에서는 캐릭터가 1~2프레임 밀리거나 사라진다(T62).
+// 내용물 사각형 r은 이 안에 있다: 위로 자라면 아래 끝, 아래로 자라면 위 끝이 같고 r.x ≥ 창 x(차이 = fitRoom offX)
+export const holdBounds = (anchor, wa, base) =>
+  fitBounds(anchor, MAX_W, Infinity, wa, undefined, base);
+
 // 이 캐릭터가 어느 디스플레이에 있는지 고르는 기준점(창이 경계에 걸치면 캐릭터 중심이 있는 쪽)
 export const petCenter = (a) => ({ x: a.x + FACE_X, y: a.y + PET_H / 2 });
 
