@@ -18,6 +18,7 @@ import {
   petCenter,
   clampTo,
   prunePositions,
+  arrangeAll,
   arrangeByArea,
 } from "./pets.mjs";
 import { installDebug } from "./debug.mjs";
@@ -167,12 +168,11 @@ function createPet(pid) {
 // 본부(허브) 창: 타워 엠블럼 + 바로가기(사무실·정렬·새 터미널). pets 맵에 "hub"로 들어가 fit·drag IPC를 그대로 쓴다
 const HUB = "hub";
 let petsHidden = false; // 허브의 눈 타일: 캐릭터 창을 한꺼번에 가린다(허브는 남는다). 저장하지 않는다 — 앱을 다시 켜면 보임
+const hubHome = (wa) => ({ x: wa.x + wa.width - 24 - 100, y: wa.y + wa.height - PET_H }); // 허브 기본: 바닥 오른쪽
 function createHub() {
   const wa = officeArea();
   const saved = positions[HUB];
-  const anchor = saved
-    ? clampTo(areaAt(saved), saved, true)
-    : { x: wa.x + wa.width - 24 - 100, y: wa.y + wa.height - PET_H }; // 기본: 바닥 오른쪽
+  const anchor = saved ? clampTo(areaAt(saved), saved, true) : hubHome(wa);
   const win = openWindow("/mini?hub=1", {
     x: anchor.x,
     y: anchor.y,
@@ -223,11 +223,31 @@ function syncPets(desks) {
     } else if (!p.win.isVisible()) p.win.showInactive();
   }
 }
+// 사무실 창이 허브와 다른 화면에서 미니로 바뀌면 허브·보이는 캐릭터를 그 화면 바닥으로 한꺼번에 옮긴다. 같은 화면이면 각자 자리 유지
+const sameArea = (a, b) =>
+  a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+function followOffice(h) {
+  const wa = officeArea();
+  if (sameArea(areaAt(h.anchor), wa)) return;
+  relocate(h, hubHome(wa));
+  positions[HUB] = h.anchor;
+  const order = visibleDesks(lastDesks, Date.now())
+    .map((d) => d.pid)
+    .filter((pid) => pets.has(pid));
+  const spots = arrangeAll(order, wa, "bottom");
+  for (const pid of order) {
+    const q = pets.get(pid);
+    relocate(q, spots[pid]);
+    positions[pid] = q.anchor;
+  }
+  savePositions();
+}
 function showMini() {
   miniOn = true;
   office.hide();
   const h = pets.get(HUB) ?? createHub(); // 허브 먼저: 새 캐릭터가 허브 화면에 놓인다(spotFor)
   syncPets(lastDesks);
+  followOffice(h);
   if (!h.win.isVisible()) h.win.showInactive();
 }
 function showOffice() {
