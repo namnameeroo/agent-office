@@ -78,7 +78,8 @@ function openWindow(path, options = {}) {
 }
 
 let office = null;
-const primaryArea = () => screen.getPrimaryDisplay().workArea; // 기준 캐릭터가 없을 때의 새 자리·허브 기본 자리
+// 기준 캐릭터가 없을 때의 새 자리·허브 기본 자리: 사무실 창이 있던 화면(보조 모니터에서 처음 미니로 바꾸면 그 화면 바닥에 모인다)
+const officeArea = () => screen.getDisplayMatching(office.getBounds()).workArea;
 // 끌기·맞춤·복원: 그 캐릭터가 있는(끌려가는) 지점에 가장 가까운 디스플레이의 작업 영역 → 보조 모니터로도 끌 수 있다
 const areaAt = (anchor) =>
   screen.getDisplayNearestPoint(petCenter(anchor)).workArea;
@@ -132,7 +133,7 @@ function createPet(pid) {
       .filter(([k]) => k !== String(pid))
       .map(([, v]) => v),
     areaAt,
-    primary: primaryArea(),
+    primary: officeArea(),
   });
   if (fresh) {
     positions[pid] = anchor;
@@ -167,7 +168,7 @@ function createPet(pid) {
 const HUB = "hub";
 let petsHidden = false; // 허브의 눈 타일: 캐릭터 창을 한꺼번에 가린다(허브는 남는다). 저장하지 않는다 — 앱을 다시 켜면 보임
 function createHub() {
-  const wa = primaryArea();
+  const wa = officeArea();
   const saved = positions[HUB];
   const anchor = saved
     ? clampTo(areaAt(saved), saved, true)
@@ -225,8 +226,8 @@ function syncPets(desks) {
 function showMini() {
   miniOn = true;
   office.hide();
+  const h = pets.get(HUB) ?? createHub(); // 허브 먼저: 새 캐릭터가 허브 화면에 놓인다(spotFor)
   syncPets(lastDesks);
-  const h = pets.get(HUB) ?? createHub();
   if (!h.win.isVisible()) h.win.showInactive();
 }
 function showOffice() {
