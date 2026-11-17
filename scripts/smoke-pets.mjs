@@ -282,6 +282,28 @@ if (hd) {
   );
 }
 
+// 6-2) 허브 끌기 안내(T67): 호버만으로는 안 뜨고, 끄는 동안만 판 위 쪽지(⌥ 없으면 "캐릭터도 함께 옮기는 중", ⌥면 "허브만 옮기는 중"),
+//      놓으면 숨김. 끌기 시작에 창 크기가 그대로(T62와 같은 이유)
+const hh = steps.hubhint;
+const sameSize = (a, b) => a.width === b.width && a.height === b.height;
+if (hh)
+  check(
+    !hh.hover.shown && sameSize(hh.before, hh.after),
+    `호버만으로는 허브 안내 안 뜸 (0.85초 ${hh.hover.shown ? "보임" : "숨김"}, 창 ${hh.before.width}×${hh.before.height})`,
+  );
+if (hd?.hint) {
+  const { drag, after, alone, size } = hd.hint;
+  const text = (s) => (s.text ?? "").replace(/\n/g, " / ");
+  check(
+    drag.shown && /캐릭터도 함께 옮기는 중/.test(drag.text ?? "") && !after.shown && alone.shown && /허브만 옮기는 중/.test(alone.text ?? ""),
+    `허브 끌기 안내: 끄는 동안 "${text(drag)}" → 놓으면 ${after.shown ? "보임" : "숨김"} → ⌥ 끄는 동안 "${text(alone)}"`,
+  );
+  check(
+    sameSize(size[0], size[1]) && sameSize(size[1], size[2]),
+    `허브 끌기 시작에 창 크기 그대로 (${size.map((b) => `${b.width}×${b.height}`).join(" → ")})`,
+  );
+}
+
 // 7) 모든 단계에서 보이는 창은 그 화면의 작업 영역 안
 const snaps = Object.values(steps).flatMap((d) =>
   Object.values(d).flatMap((v) => (Array.isArray(v) ? v : v?.b ? [v] : [])),

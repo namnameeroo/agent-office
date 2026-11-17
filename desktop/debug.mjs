@@ -395,6 +395,20 @@ async function smoke(pets, HUB, relocate, office) {
     const s1 = await polls();
     log("hide", { before, hidden, shown, polls: { h0, h1, s1 } });
 
+    // 허브 끌기 안내(T67): 호버만으로는 안 뜬다(↓ 타일에 0.85초). 끄는 동안만 판 위 쪽지 — 아래 허브 끌기 단계에서 잰다
+    const HINT =
+      'JSON.stringify((h => ({ shown: !!h && getComputedStyle(h).visibility === "visible", text: h?.innerText ?? null }))(document.querySelector(".hint")))';
+    const down = JSON.parse(
+      await js(hub, 'JSON.stringify((r => ({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }))(document.querySelector("[data-act=arrange]").getBoundingClientRect()))'),
+    );
+    const hw0 = hub.win.getBounds();
+    hub.win.webContents.sendInputEvent({ type: "mouseMove", x: down.x, y: down.y });
+    await sleep(850);
+    const hover = JSON.parse(await js(hub, HINT));
+    hub.win.webContents.sendInputEvent({ type: "mouseLeave", x: -1, y: -1 });
+    await sleep(300);
+    log("hubhint", { before: hw0, after: hub.win.getBounds(), hover });
+
     // 허브 끌기(공용 drag.mjs): 타워를 잡고 왼쪽으로 40 → 캐릭터도 같은 만큼 따라온다(무리 끌기, T61). 끈 뒤의 click은 무시돼
     // 큰 사무실이 안 열려야 한다. 캐릭터는 왼쪽 끝에 막히지 않게 바닥 x 200부터 먼저 놓는다. 이어서 ⌥ 끌기 → 허브만
     const wa = screen.getPrimaryDisplay().workArea;
@@ -408,11 +422,15 @@ async function smoke(pets, HUB, relocate, office) {
     const hb = hub.win.getBounds();
     const pb = xs();
     let release = await dragBy(hub.win, t.x, t.y, [-10, -20, -40]);
+    const hintDrag = JSON.parse(await js(hub, HINT)); // 버튼을 누른 채(끄는 중)
+    const hwDrag = hub.win.getBounds();
     release();
     await sleep(500);
     const ha = hub.win.getBounds();
     const pa = xs();
+    const hintAfter = JSON.parse(await js(hub, HINT));
     release = await dragBy(hub.win, t.x, t.y, [-10, -20, -40], ["alt"]);
+    const hintAlone = JSON.parse(await js(hub, HINT));
     release();
     await sleep(500);
     const alone = { after: hub.win.getBounds(), pets: xs() };
@@ -428,6 +446,7 @@ async function smoke(pets, HUB, relocate, office) {
       pets: { before: pb, after: pa },
       alone,
       back: { hub: alone.after.x, hubAfter: hub.win.getBounds().x, pets: xs() },
+      hint: { drag: hintDrag, after: hintAfter, alone: hintAlone, size: [hb, hwDrag, ha] },
     });
   }
   log("end", { pets: chars.length });

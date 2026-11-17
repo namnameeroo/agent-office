@@ -209,6 +209,7 @@ function createHub() {
   });
   win.setAlwaysOnTop(true, "floating");
   win.setVisibleOnAllWorkspaces(true, { skipTransformProcessType: true });
+  win.setIgnoreMouseEvents(true, { forward: true }); // 창 = 판 + 쪽지 자리(T63): 기본은 통과, 포인터가 판 위일 때만 받는다(pet:hit)
   const hub = { win, pid: HUB, anchor, size: { w: 100, h: PET_H } };
   pets.set(HUB, hub);
   return hub;
@@ -298,7 +299,7 @@ ipcMain.handle("pet:fit", (e, w, h, opts) => {
 // 포인터가 내용물 위인지(렌더러 판정). 아니면 클릭이 뒤 창으로 통과하고, 움직임만 계속 받아(forward) 다시 판정한다
 ipcMain.on("pet:hit", (e, on) => {
   const p = senderPet(e);
-  if (p && p.pid !== HUB) p.win.setIgnoreMouseEvents(!on, { forward: true });
+  if (p) p.win.setIgnoreMouseEvents(!on, { forward: true }); // 허브도(T63: 창이 판보다 크다)
   if (process.env.AGENT_OFFICE_DEBUG) console.log("[hit]", p?.pid, on, Date.now());
 });
 // 끌기: 렌더러가 앵커(왼쪽 x, 발밑 bottom = 앵커 y + PET_H)를 요청한다. 끌던 중 창 높이·자라는 방향이 바뀌어도(말풍선, 중간선) 앵커가 흔들리지 않는다.

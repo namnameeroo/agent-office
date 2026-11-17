@@ -29,7 +29,7 @@ export function draggable({
       if (Math.abs(e.screenX - drag.sx) + Math.abs(e.screenY - drag.sy) <= 4)
         return;
       drag.moved = true;
-      onStart?.();
+      onStart?.(e); // 끌기가 시작된 mousemove(⌥ 여부 — 메인이 무리/허브만을 정하는 것과 같은 이벤트)
     }
     window.agentOffice
       ?.dragTo(e.screenX - drag.gx, e.screenY + drag.gyb, e.altKey)

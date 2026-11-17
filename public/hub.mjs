@@ -51,7 +51,20 @@ badge.hidden = true;
 pets.append(eye, badge);
 pets.setAttribute("aria-pressed", "false");
 hub.append(tile("office", "큰 사무실 열기", towerSvg(52), "tower"), side, terminal, pets);
-row.replaceChildren(hub);
+
+// 끌기 안내(T67, T63의 호버 안내를 바꿈): 허브를 끌기 시작하면 판 위 쪽지 — 지금 무엇을 옮기는 중인지 + 다른 방법. 놓으면 숨김.
+// 쪽지 자리는 늘 차지하고 visibility만 바꾼다 → 끌기 시작에 창 크기가 안 바뀐다(T62와 같은 이유: 창 크기와 새 프레임이 따로 반영돼 깜빡임).
+// 그래서 창이 판보다 크고, 판 밖(쪽지 자리·그림자 여백)은 클릭을 뒤 창으로 통과시킨다(pet:hit). 끄는 동안은 통과하지 않는다(놓기를 잃지 않게)
+// ponytail: 쪽지는 늘 판 위 — 허브를 화면 맨 위에 두면 쪽지 자리만큼 아래로 밀린다. 그런 배치가 잦으면 위쪽 절반에선 판 아래로
+const hint = el("div", "hint");
+hint.setAttribute("aria-hidden", "true");
+// 두 줄을 처음부터 채워 둔다(빈 줄은 높이 0이라 처음 보일 때 창이 자란다). 모드는 끌기 시작 때 ⌥로 정해진다(메인 hubDrag와 같은 시점)
+const hintNow = el("div", "now", "캐릭터도 함께 옮기는 중");
+const hintAlt = el("div", "alt", "⌥ 누른 채 끌면 허브만");
+hint.append(hintNow, hintAlt);
+const stack = el("div", "stack");
+stack.append(hint, hub);
+row.replaceChildren(stack);
 
 // 숨긴 동안에만 2초마다 상태를 물어, 나를 기다리는 세션 수를 배지로 보인다(캐릭터가 안 보여도 놓치지 않게)
 let hidden = false;
@@ -80,15 +93,40 @@ function setHidden(on) {
   }
 }
 
-// 끌기: 판 어디서나. 끌었으면 뒤따르는 click은 무시한다
+// 끌기: 판 어디서나. 끌었으면 뒤따르는 click은 무시한다. 끄는 동안은 안내 쪽지를 보이고 클릭 통과를 끈다
 let dragged = false;
+let dragging = false;
 draggable({
   canStart: (e) => hub.contains(e.target),
-  onStart: () => hub.classList.add("dragging"),
+  onStart: (e) => {
+    dragging = true;
+    const alone = !!e?.altKey;
+    hintNow.textContent = alone ? "허브만 옮기는 중" : "캐릭터도 함께 옮기는 중";
+    hintAlt.textContent = alone ? "⌥ 없이 끌면 캐릭터도 함께" : "⌥ 누른 채 끌면 허브만";
+    hint.classList.add("on");
+    hub.classList.add("dragging");
+  },
   onEnd: (moved) => {
+    dragging = false;
     if (moved) dragged = true;
+    hint.classList.remove("on");
     hub.classList.remove("dragging");
   },
+});
+
+// 포인터가 판 위인가(창 기준). 바뀔 때만 메인에 알린다(밖이면 클릭 통과, 움직임은 계속 받는다). 끄는 동안은 늘 받는다
+let over = false;
+function setOver(on) {
+  if (on === over) return;
+  over = on;
+  window.agentOffice?.hit(on);
+}
+document.addEventListener("mousemove", (e) => {
+  const r = hub.getBoundingClientRect();
+  setOver(dragging || (e.clientX >= r.left && e.clientX < r.right && e.clientY >= r.top && e.clientY < r.bottom));
+});
+document.addEventListener("mouseleave", () => {
+  if (!dragging) setOver(false);
 });
 
 hub.addEventListener("click", async (e) => {
@@ -111,10 +149,10 @@ hub.addEventListener("click", async (e) => {
   }
 });
 
-// 창 크기를 판에 맞춘다(캐릭터 창과 같은 fit)
+// 창 크기를 판 + 쪽지 자리에 맞춘다(캐릭터 창과 같은 fit). 쪽지는 자리를 늘 차지해 끌기 시작으로는 안 바뀐다
 let lastFit = "";
 const sendFit = () => {
-  const r = hub.getBoundingClientRect();
+  const r = stack.getBoundingClientRect();
   const w = Math.ceil(r.width) + 12; // 그림자 여백(margin 6)
   const h = Math.ceil(r.height) + 12;
   const key = `${w}x${h}`;
@@ -122,5 +160,5 @@ const sendFit = () => {
   lastFit = key;
   window.agentOffice?.fit(w, h, {});
 };
-new ResizeObserver(sendFit).observe(hub);
+new ResizeObserver(sendFit).observe(stack);
 sendFit();

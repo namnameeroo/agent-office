@@ -538,17 +538,54 @@ body.pet .cell.offline .sign {
 /* ── 본부(허브) 창(/mini?hub=1): 벤토 타일 하나(판 168×60). 타워 52px(26px 맵 ×2) = 큰 사무실, 32×24 아이콘 둘 = ↑ 위 정렬 · ↓ 아래 정렬,
    32×52 세로 타일 = 새 터미널 · 캐릭터 숨김.
    커서: 버튼 위 pointer, 판의 빈 바탕(패딩·간격)만 grab, 끄는 동안(.dragging) 전부 grabbing ── */
-body.hub .hub {
+/* 끌기 안내 쪽지(T67) + 판을 세로로 쌓는다. 쪽지 자리는 늘 차지하고(visibility만) 폭은 판에 맞춘다(contain: inline-size →
+   쪽지 글자 길이가 판·창 폭을 안 바꾼다) → 끌기를 시작해도 창 크기가 바뀌지 않는다 */
+body.hub .stack {
   --label: #1d1d1f;
+  --label2: rgba(60, 60, 67, 0.6);
   --light: rgba(251, 251, 253, 0.95);
   --tile: rgba(60, 60, 67, 0.08);
   --lift:
     0 0 0 0.5px rgba(0, 0, 0, 0.14), 0 1px 2px rgba(0, 0, 0, 0.1),
     0 4px 10px rgba(0, 0, 0, 0.16);
   display: flex;
+  flex-direction: column;
+  width: max-content;
+  margin: 6px; /* 그림자가 창 밖으로 안 잘리게 */
+}
+body.hub .hint {
+  contain: inline-size;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s;
+  margin: 0 0 6px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  background: var(--light);
+  box-shadow: var(--lift);
+  color: var(--label);
+  font: 500 11px/15px -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: default;
+}
+body.hub .hint.on {
+  visibility: visible;
+  opacity: 1;
+}
+body.hub .hint > div {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body.hub .hint .now {
+  font-weight: 600;
+}
+body.hub .hint .alt {
+  color: var(--label2);
+}
+body.hub .hub {
+  display: flex;
   align-items: stretch;
   gap: 4px;
-  margin: 6px; /* 그림자가 창 밖으로 안 잘리게 */
   padding: 4px;
   border-radius: 12px;
   background: var(--light);
