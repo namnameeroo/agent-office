@@ -163,3 +163,14 @@ export function arrangeByArea(pids, areaOf, side = "bottom") {
   for (const g of groups.values()) Object.assign(out, arrangeAll(g.pids, g.wa, side));
   return out;
 }
+
+// 다른 화면으로 데려가도 그 화면 안 자리를 지킨다: x는 작업 영역 폭 비율로(좁은 화면에서도 순서 그대로),
+// y는 가까운 가장자리(위쪽 절반이면 위 끝, 아니면 바닥)에서의 거리로 → 바닥 줄은 바닥, 위 정렬 줄은 위. 화면 안으로 넣기(clampTo)는 부르는 쪽이
+export function carryTo(anchor, from, to) {
+  return {
+    x: to.x + Math.round(((anchor.x - from.x) * to.width) / from.width),
+    y: growsDown(anchor, from)
+      ? to.y + (anchor.y - from.y)
+      : to.y + to.height - (from.y + from.height - anchor.y),
+  };
+}

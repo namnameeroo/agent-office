@@ -7,6 +7,7 @@ import {
   prunePositions,
   arrangeAll,
   arrangeByArea,
+  carryTo,
   fitRoom,
   petCenter,
   spotFor,
@@ -406,4 +407,18 @@ test("arrangeByArea: 캐릭터마다 지금 있는 화면에서 그 화면 캐�
   // 한 화면뿐이면 기존 arrangeAll과 같다
   assert.deepEqual(arrangeByArea([3, 1, 2], () => ({ ...WA })), arrangeAll([3, 1, 2], WA));
   assert.deepEqual(arrangeByArea([], areaOf), {});
+});
+
+test("carryTo: 다른 화면으로 데려가도 그 화면 안 자리를 지킨다 — 바닥 줄은 바닥, 위 줄은 위, 가로는 폭 비율·순서 그대로", () => {
+  const B = { x: 810, y: -1055, width: 1920, height: 1055 }; // 주 모니터 위쪽 4K(작업 영역)
+  // 바닥 줄: B 바닥 앵커 y = -1055 + 1055 - 70 = -70 → WA2 바닥 38 + 944 - 70 = 912. 가운데(960)는 폭 비율로 756
+  assert.deepEqual(carryTo({ x: 810 + 960, y: -70 }, B, WA2), { x: 756, y: 912 });
+  // 위 정렬 줄(위 끝 + 22) → 위 끝 + 22. 첫 칸 24는 비율로 19
+  assert.deepEqual(carryTo({ x: 810 + 24, y: -1055 + 22 }, B, WA2), { x: 19, y: 60 });
+  // 좁은 화면으로 가도 가로 순서가 그대로다(오른쪽 끝에 몰려 겹치지 않음)
+  const xs = [24, 1000, 1792].map((dx) => carryTo({ x: B.x + dx, y: -70 }, B, WA2).x);
+  assert.ok(xs[0] < xs[1] && xs[1] < xs[2], String(xs));
+  // 같은 크기 화면이면 화면 위치 차이만큼 평행 이동
+  const C = { ...B, x: -1110 };
+  assert.deepEqual(carryTo({ x: 834, y: -70 }, B, C), { x: -1086, y: -70 });
 });

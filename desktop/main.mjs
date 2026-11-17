@@ -18,8 +18,8 @@ import {
   petCenter,
   clampTo,
   prunePositions,
-  arrangeAll,
   arrangeByArea,
+  carryTo,
 } from "./pets.mjs";
 import { installDebug } from "./debug.mjs";
 
@@ -80,7 +80,10 @@ function openWindow(path, options = {}) {
 
 let office = null;
 // 기준 캐릭터가 없을 때의 새 자리·허브 기본 자리: 사무실 창이 있던 화면(보조 모니터에서 처음 미니로 바꾸면 그 화면 바닥에 모인다)
-const officeArea = () => screen.getDisplayMatching(office.getBounds()).workArea;
+const officeDisplay = () => screen.getDisplayMatching(office.getBounds());
+const officeArea = () => officeDisplay().workArea;
+// 큰 사무실을 보일 때(앱 시작·showOffice) 그 창이 있던 화면 id. 미니로 바꿀 때 달라져 있으면 사용자가 사무실 창을 옮긴 것(followOffice)
+let officeFrom = null;
 // 끌기·맞춤·복원: 그 캐릭터가 있는(끌려가는) 지점에 가장 가까운 디스플레이의 작업 영역 → 보조 모니터로도 끌 수 있다
 const areaAt = (anchor) =>
   screen.getDisplayNearestPoint(petCenter(anchor)).workArea;
@@ -223,22 +226,28 @@ function syncPets(desks) {
     } else if (!p.win.isVisible()) p.win.showInactive();
   }
 }
-// 사무실 창이 허브와 다른 화면에서 미니로 바뀌면 허브·보이는 캐릭터를 그 화면 바닥으로 한꺼번에 옮긴다. 같은 화면이면 각자 자리 유지
+// 큰 사무실을 보인 동안 사무실 창을 다른 화면으로 옮겼으면, 미니로 바꿀 때 허브·캐릭터(창 없는 휴면 자리 포함)를 그 화면으로 데려간다.
+// 열었다 닫기만 했으면(같은 화면) 아무것도 안 옮긴다. 이미 그 화면에 있는 것은 그대로, 다른 화면의 것은 그 화면 안 자리를 지켜(carryTo)
+// ponytail: 두 화면에서 데려온 캐릭터끼리는 겹칠 수 있다 — 허브 정렬(↓·↑)로 푼다
 const sameArea = (a, b) =>
   a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
-function followOffice(h) {
-  const wa = officeArea();
-  if (sameArea(areaAt(h.anchor), wa)) return;
-  relocate(h, hubHome(wa));
-  positions[HUB] = h.anchor;
-  const order = visibleDesks(lastDesks, Date.now())
-    .map((d) => d.pid)
-    .filter((pid) => pets.has(pid));
-  const spots = arrangeAll(order, wa, "bottom");
-  for (const pid of order) {
-    const q = pets.get(pid);
-    relocate(q, spots[pid]);
-    positions[pid] = q.anchor;
+function followOffice() {
+  const to = officeDisplay();
+  if (to.id === officeFrom) return;
+  const wa = to.workArea;
+  const carry = (a) => {
+    const from = areaAt(a);
+    return sameArea(from, wa) ? null : carryTo(a, from, wa);
+  };
+  for (const p of pets.values()) {
+    const a = carry(p.anchor);
+    if (a) relocate(p, a);
+    positions[p.pid] = p.anchor;
+  }
+  const live = new Set([...pets.keys()].map(String));
+  for (const [pid, saved] of Object.entries(positions)) {
+    const a = !live.has(pid) && carry(saved);
+    if (a) positions[pid] = clampTo(wa, a);
   }
   savePositions();
 }
@@ -247,10 +256,11 @@ function showMini() {
   office.hide();
   const h = pets.get(HUB) ?? createHub(); // 허브 먼저: 새 캐릭터가 허브 화면에 놓인다(spotFor)
   syncPets(lastDesks);
-  followOffice(h);
+  followOffice();
   if (!h.win.isVisible()) h.win.showInactive();
 }
 function showOffice() {
+  officeFrom = officeDisplay().id;
   miniOn = false;
   for (const p of pets.values()) p.win.hide();
   office.show();
@@ -368,6 +378,7 @@ ipcMain.handle("pet:menu", (e, pid, info) => {
 app.whenReady().then(async () => {
   await serverUp;
   office = openWindow("/");
+  officeFrom = officeDisplay().id;
   // 숨긴 창이 남아 있으면 window-all-closed가 안 나므로 큰 창이 닫히면 직접 끝낸다
   office.on("closed", () => app.quit());
 
