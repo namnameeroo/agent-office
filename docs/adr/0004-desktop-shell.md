@@ -17,7 +17,7 @@ date: 2026-11-09
 | 외부 링크 | `setWindowOpenHandler`로 `http(s)`만 기본 브라우저, 나머지는 거부. `will-navigate`는 서버 origin과 정확히 같지 않으면 막는다(2026-11-12: 접두사 비교에서 바꿈, `http://127.0.0.1:4545@evil.example/`이 통과하던 문제) | 칩이 `target=_blank`라 앱 안에 창이 또 생기는 걸 막고, 읽기 전용·외부 요청 없음 원칙을 유지 |
 | Dock 배지 | 메인이 2초마다 `/api/state`를 읽어 `counts.waiting` | 서버 내부 상태를 끌어내지 않고 화면과 같은 API를 쓴다. 기존 서버를 쓰는 경우에도 동작 |
 | PATH | 메인 시작 시 Orca CLI·Homebrew 경로를 앞에 붙인다 | Finder에서 띄운 앱은 PATH가 좁아 `orca terminal switch`(ADR 0003)가 ENOENT가 된다 |
-| 패키징 | `@electron/packager`로 `dist/Agent Office-darwin-arm64/Agent Office.app`. 서명·공증·아이콘·자동 업데이트 없음 | 개인 PC에서 쓰는 단계. `dist/`는 gitignore. PF스타더스트 폰트가 로컬에 있으면 .app에 들어가므로 .app을 배포하지 않는다(README 재배포 금지) |
+| 패키징 | `@electron/packager`로 `dist/Agent Office-darwin-arm64/Agent Office.app`. 서명·공증·아이콘·자동 업데이트 없음 | 개인 PC에서 쓰는 단계. `dist/`는 gitignore. .app에서 PF스타더스트·`scripts/`·`CLAUDE.md`는 빠진다. 서명은 ad-hoc(Developer ID 없음, spctl 통과 안 함)이고 arm64 전용이라, 다른 사람과 공유할 때는 .app 대신 README의 "공개 저장소에서 직접 빌드" 절차를 권장한다 |
 
 ## 확인한 것 (2026-11-09, 이 PC)
 

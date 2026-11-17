@@ -6,6 +6,7 @@ import {
   clampTo,
   prunePositions,
   arrangeAll,
+  arrangeByArea,
   fitRoom,
   petCenter,
   spotFor,
@@ -385,4 +386,24 @@ test("spotFor: 캐릭터가 화면 위쪽 절반에 모여 있으면(위 정렬)
   assert.deepEqual(spot({ pets: [...row(60, 3), { x: 900, y: -1000 }] }).anchor, { x: 408, y: 60 });
   // 하나라도 아래쪽 절반에 있으면 지금 그대로: 가장 낮은 줄 기준
   assert.deepEqual(spot({ pets: [...row(60, 3), { x: 24, y: 912 }] }).anchor, { x: 152, y: 912 });
+});
+
+test("arrangeByArea: 캐릭터마다 지금 있는 화면에서 그 화면 캐릭터끼리 줄 선다(보조 모니터 캐릭터를 주 모니터로 끌어오지 않는다)", () => {
+  const SIDE = { x: 1440, y: -200, width: 1920, height: 1055 }; // 주 모니터 오른쪽, 위로 어긋난 보조 모니터
+  const on = { 1: SIDE, 2: WA, 3: SIDE };
+  // Electron workArea는 부를 때마다 새 객체다 → 같은 화면을 값으로 묶어야 한다
+  const areaOf = (pid) => ({ ...on[pid] });
+  // 보조 바닥 앵커 y = -200 + 1055 - 70 = 785, x = 1440 + 24 → 1464·1592. 주 모니터의 2는 그 화면 첫 칸 24
+  assert.deepEqual(arrangeByArea([1, 2, 3], areaOf), {
+    1: { x: 1464, y: 785 },
+    2: { x: 24, y: 830 },
+    3: { x: 1592, y: 785 },
+  });
+  assert.deepEqual(arrangeByArea([1, 2, 3], areaOf, "top"), {
+    ...arrangeAll([1, 3], SIDE, "top"),
+    ...arrangeAll([2], WA, "top"),
+  });
+  // 한 화면뿐이면 기존 arrangeAll과 같다
+  assert.deepEqual(arrangeByArea([3, 1, 2], () => ({ ...WA })), arrangeAll([3, 1, 2], WA));
+  assert.deepEqual(arrangeByArea([], areaOf), {});
 });

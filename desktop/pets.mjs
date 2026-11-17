@@ -148,3 +148,18 @@ export function arrangeAll(pids, wa, side = "bottom") {
   });
   return out;
 }
+
+// 모니터별 자동 정렬: 캐릭터마다 지금 있는 화면(areaOf)에서, 그 화면 캐릭터끼리 순서대로 arrangeAll. 모니터를 옮기지 않는다
+// areaOf는 부를 때마다 새 객체를 줄 수 있어(Electron workArea) 좌표 값으로 묶는다
+export function arrangeByArea(pids, areaOf, side = "bottom") {
+  const groups = new Map(); // "x,y,w,h" → { wa, pids }
+  for (const pid of pids) {
+    const wa = areaOf(pid);
+    const key = `${wa.x},${wa.y},${wa.width},${wa.height}`;
+    if (!groups.has(key)) groups.set(key, { wa, pids: [] });
+    groups.get(key).pids.push(pid);
+  }
+  const out = {};
+  for (const g of groups.values()) Object.assign(out, arrangeAll(g.pids, g.wa, side));
+  return out;
+}

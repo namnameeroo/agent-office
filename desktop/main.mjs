@@ -18,7 +18,7 @@ import {
   petCenter,
   clampTo,
   prunePositions,
-  arrangeAll,
+  arrangeByArea,
 } from "./pets.mjs";
 import { installDebug } from "./debug.mjs";
 
@@ -78,7 +78,7 @@ function openWindow(path, options = {}) {
 }
 
 let office = null;
-const primaryArea = () => screen.getPrimaryDisplay().workArea; // 새 캐릭터 자리·자동 정렬
+const primaryArea = () => screen.getPrimaryDisplay().workArea; // 기준 캐릭터가 없을 때의 새 자리·허브 기본 자리
 // 끌기·맞춤·복원: 그 캐릭터가 있는(끌려가는) 지점에 가장 가까운 디스플레이의 작업 영역 → 보조 모니터로도 끌 수 있다
 const areaAt = (anchor) =>
   screen.getDisplayNearestPoint(petCenter(anchor)).workArea;
@@ -266,12 +266,13 @@ ipcMain.handle("pet:drag-end", (e) => {
   savePositions();
   return true;
 });
-// 허브: 캐릭터 자동 정렬 — 보이는 순서(기다림→작업→휴식)대로 바닥(side "top"이면 위) 왼쪽부터 한 줄, 저장된 위치를 덮어쓴다
+// 허브: 캐릭터 자동 정렬 — 캐릭터마다 지금 있는 모니터에서, 보이는 순서(기다림→작업→휴식)대로 바닥(side "top"이면 위) 왼쪽부터 한 줄.
+// 모니터는 옮기지 않는다(T58). 저장된 위치를 덮어쓴다
 function arrangePets(side) {
   const order = visibleDesks(lastDesks, Date.now())
     .map((d) => d.pid)
     .filter((pid) => pets.has(pid));
-  const spots = arrangeAll(order, primaryArea(), side);
+  const spots = arrangeByArea(order, (pid) => areaAt(pets.get(pid).anchor), side);
   for (const pid of order) {
     const q = pets.get(pid);
     relocate(q, spots[pid]);
