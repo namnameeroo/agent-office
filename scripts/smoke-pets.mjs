@@ -249,13 +249,31 @@ else {
   }
 }
 
-// 6) 허브 끌기(공용 drag.mjs): 마우스만큼 움직이고, 끈 뒤의 click이 큰 사무실을 열지 않는다
+// 6) 허브 끌기(공용 drag.mjs): 마우스만큼 움직이고, 끈 뒤의 click이 큰 사무실을 열지 않는다.
+//    캐릭터는 같은 만큼 따라오고(무리 끌기, T61), ⌥ 끌기는 허브만 움직인다
 const hd = steps.hubdrag;
-if (hd)
+if (hd) {
   check(
     hd.after.x === hd.before.x + hd.dx && hd.after.y === hd.before.y && !hd.office,
     `허브 끌기: 창 x ${hd.before.x} → ${hd.after.x} (마우스 ${hd.dx}), 큰 사무실 열림 ${hd.office}`,
   );
+  const pids = Object.keys(hd.pets.before);
+  const lag = pids.filter((pid) => hd.pets.after[pid] !== hd.pets.before[pid] + hd.dx);
+  check(
+    !lag.length,
+    `허브 끌기에 캐릭터 ${pids.length}개가 같은 만큼 따라옴${lag.length ? ` (안 따라옴: ${lag.map((pid) => `${pid} ${hd.pets.before[pid]}→${hd.pets.after[pid]}`).join(", ")})` : ""}`,
+  );
+  const moved = pids.filter((pid) => hd.alone.pets[pid] !== hd.pets.after[pid]);
+  check(
+    hd.alone.after.x === hd.after.x + hd.dx && !moved.length,
+    `⌥ 허브 끌기: 허브 x ${hd.after.x} → ${hd.alone.after.x}, 캐릭터 그대로${moved.length ? ` (움직임: ${moved.join(" ")})` : ""}`,
+  );
+  const off = pids.filter((pid) => hd.back.pets[pid] !== hd.alone.pets[pid]);
+  check(
+    hd.back.hubAfter === hd.back.hub && !off.length,
+    `허브를 왼쪽 400 끌었다 되돌리면 캐릭터도 제자리(화면 끝에 막혔던 것 포함)${off.length ? ` (어긋남: ${off.map((pid) => `${pid} ${hd.alone.pets[pid]}→${hd.back.pets[pid]}`).join(", ")})` : ""}`,
+  );
+}
 
 // 7) 모든 단계에서 보이는 창은 그 화면의 작업 영역 안
 const snaps = Object.values(steps).flatMap((d) =>

@@ -284,16 +284,38 @@ ipcMain.handle("pet:fit", (e, w, h, opts) => {
 });
 // 끌기: 렌더러가 앵커(왼쪽 x, 발밑 bottom = 앵커 y + PET_H)를 요청한다. 끌던 중 창 높이·자라는 방향이 바뀌어도(말풍선, 중간선) 앵커가 흔들리지 않는다.
 // 끌려가는 지점의 화면을 따른다(보조 모니터). → fit과 같은 fitRoom 값 | false
-ipcMain.handle("pet:drag", (e, x, bottom) => {
+// 허브 끌기 = 무리 끌기(T61): 끌기 시작 때 다른 창들의 앵커와 허브 창 위치를 기억해 두고, 허브 창이 움직인 만큼(시작점 기준 누적)
+// 같이 옮긴다. 시작점 기준이라 화면 끝에 막혀 밀린 캐릭터도 되돌아오면 제자리. ⌥를 누르고 시작하면 허브만.
+// 이동량은 허브 앵커가 아니라 창으로 잰다: 허브 앵커(기본 자리)는 오른쪽 끝 맞춤으로 창과 어긋나 있을 수 있다(실측 56px)
+let hubDrag = null; // null(끌기 전) | false(허브만) | { from: 허브 창 bounds, starts: [[창, 시작 앵커]] }
+ipcMain.handle("pet:drag", (e, x, bottom, alone) => {
   const p = senderPet(e);
   if (process.env.AGENT_OFFICE_DEBUG) console.log("[drag]", !!p, x, bottom);
   if (!p || !Number.isFinite(x) || !Number.isFinite(bottom)) return false;
-  return moveTo(p, { x: Math.round(x), y: Math.round(bottom) - PET_H });
+  const hub = p.pid === HUB;
+  if (hub && hubDrag === null)
+    hubDrag = !alone && {
+      from: p.win.getBounds(),
+      starts: [...pets.values()].filter((q) => q !== p).map((q) => [q, q.anchor]),
+    };
+  const room = moveTo(p, { x: Math.round(x), y: Math.round(bottom) - PET_H });
+  if (hub && hubDrag) {
+    const b = p.win.getBounds();
+    const dx = b.x - hubDrag.from.x;
+    const dy = b.y + b.height - (hubDrag.from.y + hubDrag.from.height);
+    for (const [q, a] of hubDrag.starts)
+      if (!q.win.isDestroyed()) relocate(q, { x: a.x + dx, y: a.y + dy });
+  }
+  return room;
 });
 ipcMain.handle("pet:drag-end", (e) => {
   const p = senderPet(e);
   if (!p) return false;
   positions[p.pid] = p.anchor;
+  if (p.pid === HUB) {
+    for (const [q] of hubDrag?.starts ?? []) positions[q.pid] = q.anchor;
+    hubDrag = null;
+  }
   savePositions();
   return true;
 });

@@ -3,7 +3,7 @@
 // 발밑 기준이라 끌던 중 창 높이·자라는 방향이 바뀌어도(말풍선, 화면 중간선) 어긋나지 않는다.
 // shiftX(): 창이 오른쪽 끝에 걸려 앵커보다 왼쪽으로 밀린 px(캐릭터 창). 잡은 점을 앵커 기준으로 바꿔야 끌기 시작에 안 튄다.
 // footY(): 창 위 끝에서 발밑까지. 위로 자라는 창(기본)은 창 아래 끝 = innerHeight, 아래로 자라는 캐릭터 창은 메인이 준 footY.
-// onRoom: dragTo가 돌려준 fitRoom 값을 받는다
+// onRoom: dragTo가 돌려준 fitRoom 값을 받는다. ⌥(altKey)도 함께 보낸다: 허브 끌기에서 ⌥ = 허브만(아니면 캐릭터가 따라온다, 메인 hubDrag)
 export function draggable({
   canStart,
   shiftX = () => 0,
@@ -32,7 +32,7 @@ export function draggable({
       onStart?.();
     }
     window.agentOffice
-      ?.dragTo(e.screenX - drag.gx, e.screenY + drag.gyb)
+      ?.dragTo(e.screenX - drag.gx, e.screenY + drag.gyb, e.altKey)
       .then((room) => onRoom?.(room));
   });
   const end = () => {

@@ -182,11 +182,12 @@ const MD = `(() => { const b = document.querySelector(".bubble[data-open]"); if 
   return JSON.stringify({ strong: n("strong"), code: n("code"), li: n("li"), pre: n("pre"), h: n(".h"), a: n("a"), bad: n("img, script, [onerror]"),
     link: a && { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), href: a.href, target: a.target, rel: a.rel } }); })()`;
 // 창 안 (x, y)를 잡고 화면 x로 dxs만큼 차례로 끈 뒤 놓는다(실제 입력 이벤트). 창이 따라 움직이므로 창 안 좌표는 그대로 둔다
-async function dragBy(win, x, y, dxs) {
+// modifiers: 누른 보조 키(["alt"] = ⌥ 끌기). 모든 합성 이벤트에 싣는다
+async function dragBy(win, x, y, dxs, modifiers = []) {
   const b = win.getBounds();
   const wc = win.webContents;
   const at = (type, dx, extra = {}) =>
-    wc.sendInputEvent({ type, x, y, globalX: b.x + x + dx, globalY: b.y + y, ...extra });
+    wc.sendInputEvent({ type, x, y, globalX: b.x + x + dx, globalY: b.y + y, modifiers, ...extra });
   at("mouseDown", 0, { button: "left", clickCount: 1 });
   for (const dx of dxs) {
     await sleep(80);
@@ -335,15 +336,40 @@ async function smoke(pets, HUB, relocate, office) {
     const s1 = await polls();
     log("hide", { before, hidden, shown, polls: { h0, h1, s1 } });
 
-    // 허브 끌기(공용 drag.mjs): 타워를 잡고 왼쪽으로 40. 끈 뒤의 click은 무시돼 큰 사무실이 안 열려야 한다
+    // 허브 끌기(공용 drag.mjs): 타워를 잡고 왼쪽으로 40 → 캐릭터도 같은 만큼 따라온다(무리 끌기, T61). 끈 뒤의 click은 무시돼
+    // 큰 사무실이 안 열려야 한다. 캐릭터는 왼쪽 끝에 막히지 않게 바닥 x 200부터 먼저 놓는다. 이어서 ⌥ 끌기 → 허브만
+    const wa = screen.getPrimaryDisplay().workArea;
+    const live = chars.filter((p) => !p.win.isDestroyed());
+    live.forEach((p, i) => relocate(p, { x: wa.x + 200 + (i % 8) * 128, y: wa.y + wa.height - PET_H }));
+    await sleep(600);
+    const xs = () => Object.fromEntries(live.map((p) => [p.pid, p.win.getBounds().x]));
     const t = JSON.parse(
       await js(hub, 'JSON.stringify((r => ({ x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }))(document.querySelector("[data-act=office]").getBoundingClientRect()))'),
     );
     const hb = hub.win.getBounds();
-    const release = await dragBy(hub.win, t.x, t.y, [-10, -20, -40]);
+    const pb = xs();
+    let release = await dragBy(hub.win, t.x, t.y, [-10, -20, -40]);
     release();
     await sleep(500);
-    log("hubdrag", { dx: -40, before: hb, after: hub.win.getBounds(), office: office.isVisible() });
+    const ha = hub.win.getBounds();
+    const pa = xs();
+    release = await dragBy(hub.win, t.x, t.y, [-10, -20, -40], ["alt"]);
+    release();
+    await sleep(500);
+    const alone = { after: hub.win.getBounds(), pets: xs() };
+    // 왼쪽으로 400 끌었다(왼쪽 캐릭터는 화면 끝에 막힘) 같은 끌기 안에서 제자리로 → 시작점 기준이라 캐릭터도 정확히 제자리
+    release = await dragBy(hub.win, t.x, t.y, [-10, -400, 0]);
+    release();
+    await sleep(500);
+    log("hubdrag", {
+      dx: -40,
+      before: hb,
+      after: ha,
+      office: office.isVisible(),
+      pets: { before: pb, after: pa },
+      alone,
+      back: { hub: alone.after.x, hubAfter: hub.win.getBounds().x, pets: xs() },
+    });
   }
   log("end", { pets: chars.length });
 }
